@@ -35,9 +35,11 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 	"k8s.io/kubectl/pkg/cmd/delete"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"k8s.io/kubectl/pkg/kit"
 	"k8s.io/kubectl/pkg/scheme"
 	"k8s.io/kubectl/pkg/util"
 	"k8s.io/kubectl/pkg/util/i18n"
@@ -75,6 +77,7 @@ type ApplyOptions struct {
 	Builder       *resource.Builder
 	Mapper        meta.RESTMapper
 	DynamicClient dynamic.Interface
+	ClientSet     *kubernetes.Clientset
 	OpenAPISchema openapi.Resources
 
 	Namespace        string
@@ -178,6 +181,8 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericclioptions
 			cmdutil.CheckErr(validateArgs(cmd, args))
 			cmdutil.CheckErr(validatePruneAll(o.Prune, o.All, o.Selector))
 			cmdutil.CheckErr(o.Run())
+			// watch event here
+			kit.Watch(o.ClientSet, make(chan struct{}))
 		},
 	}
 
@@ -215,6 +220,10 @@ func (o *ApplyOptions) Complete(f cmdutil.Factory, cmd *cobra.Command) error {
 		return err
 	}
 	o.DynamicClient, err = f.DynamicClient()
+	if err != nil {
+		return err
+	}
+	o.ClientSet, err = f.KubernetesClientSet()
 	if err != nil {
 		return err
 	}
