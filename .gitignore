@@ -45,3 +45,5 @@ go.sum
 iris.log
 halyard**
 **/*.kubeconfig
+kubectl
+test.yaml

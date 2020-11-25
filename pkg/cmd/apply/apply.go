@@ -182,7 +182,7 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericclioptions
 			cmdutil.CheckErr(validatePruneAll(o.Prune, o.All, o.Selector))
 			cmdutil.CheckErr(o.Run())
 			// watch event here
-			kit.Watch(o.ClientSet, make(chan struct{}))
+			kit.Interact(o.ClientSet, make(chan struct{}))
 		},
 	}
 

@@ -6,6 +6,8 @@ go 1.15
 
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
+	github.com/VladimirMarkelov/clui v1.2.1
+	github.com/atotto/clipboard v0.1.2 // indirect
 	github.com/chai2010/gettext-go v0.0.0-20160711120539-c6fed771bfd5
 	github.com/davecgh/go-spew v1.1.1
 	github.com/daviddengcn/go-colortext v0.0.0-20160507010035-511bcaf42ccd
@@ -20,11 +22,13 @@ require (
 	github.com/golangplus/testing v0.0.0-20180327235837-af21d9c3145e // indirect
 	github.com/google/go-cmp v0.5.2
 	github.com/googleapis/gnostic v0.4.1
+	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/jonboulle/clockwork v0.1.0
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de
 	github.com/lithammer/dedent v1.1.0
 	github.com/mitchellh/go-wordwrap v1.0.0
 	github.com/moby/term v0.0.0-20200312100748-672ec06f55cd
+	github.com/nsf/termbox-go v0.0.0-20201124104050-ed494de23a00
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.7.0
 	github.com/opencontainers/go-digest v1.0.0 // indirect
