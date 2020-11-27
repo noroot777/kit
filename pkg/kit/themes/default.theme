@@ -19,7 +19,7 @@ DisabledBack = black bold
 
 // editable & listbox-like controls (interactive ones)
 EditBack       = blue
-EditText       = yellow
+EditText       = black
 EditActiveBack = blue bold
 EditActiveText = yellow bold
 SelectionText  = yellow bold

@@ -44,6 +44,7 @@ import (
 	"k8s.io/client-go/scale"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
+	"k8s.io/kubectl/pkg/kit"
 	utilexec "k8s.io/utils/exec"
 )
 
@@ -112,6 +113,7 @@ var ErrExit = fmt.Errorf("exit")
 // This method is generic to the command in use and may be used by non-Kubectl
 // commands.
 func CheckErr(err error) {
+	kit.Errors = append(kit.Errors, err)
 	checkErr(err, fatalErrHandler)
 }
 

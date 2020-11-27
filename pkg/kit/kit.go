@@ -8,25 +8,45 @@ import (
 	termbox "github.com/nsf/termbox-go"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 )
 
-// Interact start a interactive term ui
-func Interact(clientSet kubernetes.Interface, stopper chan struct{}) {
+var (
+	// Errors errors before intercept
+	Errors []error
+	// events displaying in Event Table
+	values []string
+	// column count of Event table(include the NO. column)
+	col = 6
+)
+
+// KitOptions TODO
+type KitOptions struct {
+	Namespace string
+	Objects   []*resource.Info
+	ClientSet kubernetes.Interface
+	Stopper   chan struct{}
+}
+
+// UI start a interactive term ui
+func UI(o KitOptions) {
 	ui.InitLibrary()
+	ui.SetThemePath("themes")
+	ui.SetCurrentTheme("default")
+	items := ui.ThemeNames()
+	for _, theme := range items {
+		fmt.Println(theme)
+	}
 	defer ui.DeinitLibrary()
 
-	reader := watch(clientSet, stopper)
+	reader := watch(o.ClientSet, o.Stopper)
 	createView(reader)
 
 	ui.MainLoop()
-
 }
-
-var values []string
-var col = 6
 
 // TODO set cursor focus
 func createView(reader chan *corev1.Event) {
@@ -35,15 +55,20 @@ func createView(reader chan *corev1.Event) {
 	view.SetBorder(ui.BorderThin)
 	// view.SetBackColor(termbox.ColorDarkGray)
 
-	frmLeft := ui.CreateFrame(view, 30, ui.AutoSize, ui.BorderThin, ui.Fixed)
+	frmLeft := ui.CreateFrame(view, 50, ui.AutoSize, ui.BorderThin, ui.Fixed)
 	// frmLeft.SetPaddings(1, 1)
 	frmLeft.SetTitle(" Activities ")
+
+	// text show activities
+	txtActivity := ui.CreateTextView(frmLeft, ui.AutoSize, ui.AutoSize, 1)
+	txtActivity.SetWordWrap(true)
 
 	frmRight := ui.CreateFrame(view, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
 	frmRight.SetPack(ui.Vertical)
 	// frmRight.SetPaddings(1, 1)
 	frmRight.SetTitle(" Kubernetes Events ")
 
+	// table show events
 	tabEvents := ui.CreateTableView(frmRight, ui.AutoSize, ui.AutoSize, 1)
 	// tabEvents.SetPaddings(1, 1)
 	tabEvents.SetTitle(" Event List ")
@@ -65,8 +90,8 @@ func createView(reader chan *corev1.Event) {
 	frmRightBottom := ui.CreateFrame(frmRight, ui.AutoSize, 15, ui.BorderThin, ui.Fixed)
 	// frmRightBottom.SetPaddings(1, 1)
 	frmRightBottom.SetTitle(" Events Detail ")
-	txtEvent := ui.CreateTextView(frmRightBottom, 120, ui.AutoSize, ui.AutoSize)
-	txtEvent.SetActive(true)
+	// text show event detail
+	txtEvent := ui.CreateTextView(frmRightBottom, ui.AutoSize, ui.AutoSize, 1)
 	txtEvent.SetWordWrap(true)
 
 	tabEvents.OnSelectCell(func(column int, row int) {
@@ -77,7 +102,15 @@ func createView(reader chan *corev1.Event) {
 		for {
 			select {
 			case event, _ := <-reader:
-				values = append([]string{strconv.Itoa(len(values)/col + 1), event.LastTimestamp.Format("15:04:05"), event.Type, event.Reason, event.InvolvedObject.Name, event.Message}, values...)
+				values = append(
+					[]string{
+						strconv.Itoa(len(values)/col + 1),
+						event.LastTimestamp.Format("15:04:05"),
+						event.Type,
+						event.Reason,
+						event.InvolvedObject.Name,
+						event.Message},
+					values...)
 				tabEvents.SetRowCount(tabEvents.RowCount() + 1)
 
 				txtEvent.SetText(text(values[:col]))
@@ -95,12 +128,6 @@ func text(v []string) []string {
 		fmt.Sprint("OBJECT   : " + v[4]),
 		fmt.Sprint("MESSAGE  : " + v[5]),
 	}
-	// t[0] = fmt.Sprint("#:\t", v[0])
-	// t[1] = fmt.Sprint("LAST_SEEN:\t" + v[1])
-	// t[2] = fmt.Sprint("TYPE:\t" + v[2])
-	// t[3] = fmt.Sprint("REASON:\t" + v[3])
-	// t[4] = fmt.Sprint("OBJECT:\t" + v[4])
-	// t[5] = fmt.Sprint("MESSAGE:\t" + v[5])
 	return t
 }
 
