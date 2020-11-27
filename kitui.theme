@@ -1,15 +1,15 @@
 ﻿//----------------- Theme properties -----------------
-title=TurboVision
-author=Vladimir Markelov
-version=1.0 (2016-01-04)
+title=kit
+author=noroot777
+version=1.0
 parent=default
 
 
 //----------------- Colors -----------------
 
 // View colors - internal area and border
-ViewBack = white
-ViewText = white bold
+ViewBack = black
+ViewText = black bold
 
 // general colors
 Back         = white
@@ -18,18 +18,18 @@ DisabledText = white
 DisabledBack = black bold
 
 // editable & listbox-like controls (interactive ones)
-EditBack       = blue
-EditText       = black
-EditActiveBack = blue bold
-EditActiveText = yellow bold
+EditBack       = black
+EditText       = white
+EditActiveBack = black bold
+EditActiveText = white bold
 SelectionText  = yellow bold
-SelectionBack  = cyan bold
+SelectionBack  = yellow bold
 
 // scroll control
-ScrollText = white bold
-ScrollBack = white
-ThumbText  = white bold
-ThumbBack  = white
+ScrollText = black bold
+ScrollBack = black
+ThumbText  = black bold
+ThumbBack  = black
 
 // window-like controls (checkbox, radiogroup...)
 ControlText         = black
@@ -41,14 +41,14 @@ ControlDisabledText = black bold
 ControlShadow       = black
 
 // progressbar control
-ProgressBack       = blue
-ProgressText       = yellow
-ProgressActiveBack = blue bold
-ProgressActiveText = yellow bold
+// ProgressBack       = blue
+// ProgressText       = yellow
+// ProgressActiveBack = blue bold
+// ProgressActiveText = yellow bold
 
 // button control
 ButtonBack=green bold
-ButtonText=lime
+ButtonText=black
 ButtonActiveBack=green bold
 ButtonActiveText=white bold
 ButtonShadowBack=black
@@ -60,12 +60,12 @@ BarChartBack=black
 BarChartText=white
 
 // spark chart
-SparkChartBack=black
-SparkChartText=white
-SparkChartBarBack=black
-SparkChartBarText=cyan
-SparkChartMaxBack=black
-SparkChartMaxText=cyan bold
+// SparkChartBack=black
+// SparkChartText=white
+// SparkChartBarBack=black
+// SparkChartBarText=cyan
+// SparkChartMaxBack=black
+// SparkChartMaxText=cyan bold
 
 // table view
 TableText=white
@@ -82,7 +82,8 @@ TableHeaderBack=black
 SingleBorder=─│┌┐└┘
 DoubleBorder=─│┌┐└┘
 Edit=←→V*
-ScrollBar=░■▲▼◄►
+//ScrollBar=░■▲▼◄►
+ScrollBar=██████
 ViewButtons=^_■[]
 CheckBox=[] X?
 Radio=() *

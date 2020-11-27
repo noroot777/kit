@@ -6,7 +6,6 @@ go 1.15
 
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
-	github.com/VladimirMarkelov/clui v1.2.1
 	github.com/atotto/clipboard v0.1.2 // indirect
 	github.com/chai2010/gettext-go v0.0.0-20160711120539-c6fed771bfd5
 	github.com/davecgh/go-spew v1.1.1
@@ -28,6 +27,7 @@ require (
 	github.com/lithammer/dedent v1.1.0
 	github.com/mitchellh/go-wordwrap v1.0.0
 	github.com/moby/term v0.0.0-20200312100748-672ec06f55cd
+	github.com/noroot777/clui v1.2.3
 	github.com/nsf/termbox-go v0.0.0-20201124104050-ed494de23a00
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.7.0

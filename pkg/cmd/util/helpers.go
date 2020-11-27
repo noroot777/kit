@@ -113,7 +113,6 @@ var ErrExit = fmt.Errorf("exit")
 // This method is generic to the command in use and may be used by non-Kubectl
 // commands.
 func CheckErr(err error) {
-	kit.Errors = append(kit.Errors, err)
 	checkErr(err, fatalErrHandler)
 }
 
@@ -140,6 +139,9 @@ func checkErr(err error, handleErr func(string, int)) {
 	if err == nil {
 		return
 	}
+
+	// append error to kit
+	kit.Errors = append(kit.Errors, err)
 
 	switch {
 	case err == ErrExit:

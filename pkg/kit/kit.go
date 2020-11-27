@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	ui "github.com/VladimirMarkelov/clui"
+	ui "github.com/noroot777/clui"
 	termbox "github.com/nsf/termbox-go"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
@@ -34,12 +34,8 @@ type KitOptions struct {
 // UI start a interactive term ui
 func UI(o KitOptions) {
 	ui.InitLibrary()
-	ui.SetThemePath("themes")
-	ui.SetCurrentTheme("default")
-	items := ui.ThemeNames()
-	for _, theme := range items {
-		fmt.Println(theme)
-	}
+	ui.SetThemePath(".")
+	ui.SetCurrentTheme("kitui")
 	defer ui.DeinitLibrary()
 
 	reader := watch(o.ClientSet, o.Stopper)
@@ -61,7 +57,14 @@ func createView(reader chan *corev1.Event) {
 
 	// text show activities
 	txtActivity := ui.CreateTextView(frmLeft, ui.AutoSize, ui.AutoSize, 1)
+	txtActivity.SetShowScroll(false)
 	txtActivity.SetWordWrap(true)
+	for _, err := range Errors {
+		txtActivity.AddText([]string{"⚠️ " + err.Error()})
+	}
+	// txtActivity.AddText([]string{" ⚠️   Namespace created!"})
+	// txtActivity.AddText([]string{" ✅   Namespace created!"})
+	// txtActivity.AddText([]string{" ✖️   Namespace created!"})
 
 	frmRight := ui.CreateFrame(view, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
 	frmRight.SetPack(ui.Vertical)
@@ -82,6 +85,7 @@ func createView(reader chan *corev1.Event) {
 	}
 	tabEvents.SetColumns(cols)
 	tabEvents.SetRowCount(0)
+	tabEvents.SetShowScroll(false)
 	tabEvents.SetFullRowSelect(true)
 	tabEvents.SetShowLines(false)
 	tabEvents.SetShowRowNumber(false)
@@ -92,6 +96,7 @@ func createView(reader chan *corev1.Event) {
 	frmRightBottom.SetTitle(" Events Detail ")
 	// text show event detail
 	txtEvent := ui.CreateTextView(frmRightBottom, ui.AutoSize, ui.AutoSize, 1)
+	txtEvent.SetShowScroll(false)
 	txtEvent.SetWordWrap(true)
 
 	tabEvents.OnSelectCell(func(column int, row int) {
