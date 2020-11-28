@@ -32,11 +32,11 @@ ThumbText  = black bold
 ThumbBack  = black
 
 // window-like controls (checkbox, radiogroup...)
-ControlText         = black
-ControlBack         = cyan bold
-ControlActiveBack   = cyan bold
-ControlActiveText   = yellow bold
-ControlDisabledBack = cyan bold
+ControlText         = white
+ControlBack         = black bold
+ControlActiveBack   = black bold
+ControlActiveText   = white bold
+ControlDisabledBack = black bold
 ControlDisabledText = black bold
 ControlShadow       = black
 

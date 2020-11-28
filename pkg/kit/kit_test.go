@@ -21,7 +21,12 @@ func TestWatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reader := watch(clientSet, make(chan struct{}))
+	o := KitOptions{
+		ClientSet: clientSet,
+		stopper:   make(chan struct{}),
+	}
+	opts = o
+	reader := watchEvents()
 	for {
 		select {
 		case event, _ := <-reader:

@@ -183,7 +183,7 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericclioptions
 			cmdutil.CheckErr(o.Run())
 			kit.InterceptApply(kit.KitOptions{
 				Namespace: o.Namespace,
-				Objects:   o.objects, // no need call GetObjects() after o.Run() execed
+				Objects:   o.objects, // no need call GetObjects() after o.Run() execed??
 				ClientSet: o.ClientSet,
 			})
 		},
