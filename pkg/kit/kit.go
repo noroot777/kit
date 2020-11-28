@@ -3,6 +3,7 @@ package kit
 import (
 	"fmt"
 	"strconv"
+	"sync"
 
 	ui "github.com/noroot777/clui"
 	termbox "github.com/nsf/termbox-go"
@@ -19,10 +20,10 @@ var (
 	Errors []error
 	// events displaying in Event Table
 	values []string
+	// values lock
+	mtx sync.RWMutex
 	// column count of Event table(include the NO. column)
 	col = 6
-	// kit options
-	opts KitOptions
 )
 
 // KitOptions TODO
@@ -30,26 +31,40 @@ type KitOptions struct {
 	Namespace string // TODO apply -f, there are multiple namespaces
 	Objects   []*resource.Info
 	ClientSet kubernetes.Interface
-	stopper   chan struct{}
-	focusOn   FocusOn
+
+	stopper      chan struct{}
+	eventsReader chan *corev1.Event
+	focusOn      FocusOn
+}
+
+// NewKitOptions create new KitOptions
+func NewKitOptions(namespace string, objects []*resource.Info, clientSet *kubernetes.Clientset) *KitOptions {
+	return &KitOptions{
+		Namespace: namespace,
+		Objects:   objects,
+		ClientSet: clientSet,
+
+		stopper:      make(chan struct{}),
+		eventsReader: make(chan *corev1.Event),
+		focusOn:      FocusOnCurrentNamespace,
+	}
 }
 
 // UI start a interactive term ui
-func UI(o KitOptions) {
+func UI(opt *KitOptions) {
 	ui.InitLibrary()
 	ui.SetThemePath(".")
-	ui.SetCurrentTheme("kitui")
+	ui.SetCurrentTheme("ui")
 	defer ui.DeinitLibrary()
 
-	opts = o
-	eventsReader := watchEvents()
-	createView(eventsReader)
+	watchEvents(opt)
+	createView(opt)
 
 	ui.MainLoop()
 }
 
 // TODO set cursor focus
-func createView(eventsReader chan *corev1.Event) {
+func createView(opt *KitOptions) {
 	w, h := termbox.Size()
 	view := ui.AddWindow(0, 0, w, h, "Kubectl Interactive Tool")
 	view.SetBorder(ui.BorderThin)
@@ -82,40 +97,26 @@ func createView(eventsReader chan *corev1.Event) {
 	frmRadio.SetAlign(ui.AlignRight)
 	radioGroup := ui.CreateRadioGroup()
 	radioCR := ui.CreateRadio(frmRadio, ui.AutoSize, "Current related objects", 1)
-	radioCR.SetSelected(true)
+	radioCR.SetSelected(false)
 	radioCR.SetActive(false)
 	radioGroup.AddItem(radioCR)
 	radioCN := ui.CreateRadio(frmRadio, ui.AutoSize, "Current namespace", 1)
-	radioCN.SetSelected(false)
+	radioCN.SetSelected(true)
 	radioCN.SetActive(false)
 	radioGroup.AddItem(radioCN)
 	radioAN := ui.CreateRadio(frmRadio, ui.AutoSize, "All namespaces", 1)
 	radioAN.SetSelected(false)
 	radioAN.SetActive(false)
 	radioGroup.AddItem(radioAN)
-	radioCR.OnActive(func(active bool) {
-		if active {
-			changeFocus(FocusOnCurrentRelated)
-		}
-	})
-	radioCN.OnActive(func(active bool) {
-		if active {
-			changeFocus(FocusOnCurrentNamespace)
-		}
-	})
-	radioAN.OnActive(func(active bool) {
-		if active {
-			changeFocus(FocusOnAllNamespace)
-		}
-	})
 
 	// table show events
 	frmEvents := ui.CreateFrame(frmRight, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
 	frmEvents.SetTitle(" Events List ")
+	frmEvents.ResizeChildren()
 	tabEvents := ui.CreateTableView(frmEvents, ui.AutoSize, ui.AutoSize, 1)
 	tabEvents.SetTitle(" Event List ")
 	cols := []ui.Column{
-		{Title: "#", Width: 3, Alignment: ui.AlignLeft},
+		{Title: "#", Width: 4, Alignment: ui.AlignLeft},
 		{Title: "LAST_SEEN", Width: 10, Alignment: ui.AlignLeft},
 		{Title: "TYPE", Width: 12, Alignment: ui.AlignLeft},
 		{Title: "REASON", Width: 20, Alignment: ui.AlignLeft},
@@ -128,7 +129,6 @@ func createView(eventsReader chan *corev1.Event) {
 	tabEvents.SetFullRowSelect(true)
 	tabEvents.SetShowLines(false)
 	tabEvents.SetShowRowNumber(false)
-	tabEvents.OnDrawCell(drawCell)
 
 	frmRightBottom := ui.CreateFrame(frmRight, ui.AutoSize, 10, ui.BorderThin, ui.Fixed)
 	frmRightBottom.SetTitle(" Events Detail ")
@@ -138,14 +138,12 @@ func createView(eventsReader chan *corev1.Event) {
 	txtEvent.SetWordWrap(true)
 	txtEvent.SetActive(false)
 
-	tabEvents.OnSelectCell(func(column int, row int) {
-		txtEvent.SetText(text(values[row*col : (row+1)*col]))
-	})
-
 	go func() {
 		for {
 			select {
-			case event, _ := <-eventsReader:
+			case event, _ := <-opt.eventsReader:
+				mtx.Lock()
+
 				values = append(
 					[]string{
 						strconv.Itoa(len(values)/col + 1),
@@ -155,12 +153,71 @@ func createView(eventsReader chan *corev1.Event) {
 						event.InvolvedObject.Name,
 						event.Message},
 					values...)
-				tabEvents.SetRowCount(tabEvents.RowCount() + 1)
 
+				tabEvents.SetRowCount(tabEvents.RowCount() + 1)
 				txtEvent.SetText(text(values[:col]))
+
+				mtx.Unlock()
 			}
 		}
 	}()
+
+	tabEvents.OnDrawCell(drawCell)
+
+	tabEvents.OnSelectCell(func(column int, row int) {
+		mtx.Lock()
+		defer mtx.Unlock()
+
+		txtEvent.SetText(text(values[row*col : (row+1)*col]))
+	})
+
+	radioGroup.OnSelectItem(func(c *ui.Radio) {
+		// tabEvents.OnDrawCell(nil)
+		// tabEvents.SetRowCount(0)
+		var index = -1
+		for i, item := range c.Parent().Children() {
+			if item == c {
+				index = i
+				break
+			}
+		}
+		if int(opt.focusOn) == index {
+			return
+		}
+		switch index {
+		case 0:
+			changeRadioFocus(FocusOnCurrentRelated, opt)
+		case 1:
+			changeRadioFocus(FocusOnCurrentNamespace, opt)
+		case 2:
+			changeRadioFocus(FocusOnAllNamespace, opt)
+		case -1:
+			return
+		}
+		tabEvents = createNewTableView()
+		tabEvents.OnDrawCell(drawCell)
+		txtEvent.SetText([]string{""})
+	})
+}
+
+func createNewTableView() *ui.TableView {
+	tabEvents := ui.NewTableView(ui.AutoSize, ui.AutoSize, 1)
+	tabEvents.SetTitle(" Event List ")
+	cols := []ui.Column{
+		{Title: "#", Width: 4, Alignment: ui.AlignLeft},
+		{Title: "LAST_SEEN", Width: 10, Alignment: ui.AlignLeft},
+		{Title: "TYPE", Width: 12, Alignment: ui.AlignLeft},
+		{Title: "REASON", Width: 20, Alignment: ui.AlignLeft},
+		{Title: "OBJECT", Width: 30, Alignment: ui.AlignLeft},
+		{Title: "MESSAGE", Width: 100, Alignment: ui.AlignLeft},
+	}
+	tabEvents.SetColumns(cols)
+	tabEvents.SetRowCount(0)
+	tabEvents.SetShowScroll(false)
+	tabEvents.SetFullRowSelect(true)
+	tabEvents.SetShowLines(false)
+	tabEvents.SetShowRowNumber(false)
+	return tabEvents
 }
 
 func text(v []string) []string {
@@ -175,16 +232,28 @@ func text(v []string) []string {
 	return t
 }
 
-func changeFocus(f FocusOn) {
-	values = []string{}
+func changeRadioFocus(f FocusOn, opts *KitOptions) {
+	mtx.Lock()
+	defer mtx.Unlock()
 
+	values = values[0:0]
+	opts.stopper <- struct{}{}
+	// close(opts.eventsReader)
+	opts.focusOn = f
+
+	// watchEvents(opts)
 }
 
 func drawCell(info *ui.ColumnDrawInfo) {
-	info.Text = values[info.Row*col+info.Col]
+	mtx.Lock()
+	defer mtx.Unlock()
+
+	if len(values) > 0 {
+		info.Text = values[info.Row*col+info.Col]
+	}
 }
 
-func watchEvents() chan *corev1.Event {
+func watchEvents(opts *KitOptions) {
 	var siOpts []informers.SharedInformerOption
 	if opts.focusOn != FocusOnAllNamespace {
 		siOpts = append(siOpts, informers.WithNamespace(opts.Namespace))
@@ -195,26 +264,25 @@ func watchEvents() chan *corev1.Event {
 
 	go f.Start(opts.stopper)
 
-	if !cache.WaitForCacheSync(opts.stopper, informer.HasSynced) {
-		fmt.Print("Timed out waiting for caches to sync")
-	}
+	// if !cache.WaitForCacheSync(opts.stopper, informer.HasSynced) {
+	// 	fmt.Print("Timed out waiting for caches to sync")
+	// }
 
-	var reader = make(chan *corev1.Event)
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			reader <- obj.(*corev1.Event)
+			// TODO filter related objects
+			opts.eventsReader <- obj.(*corev1.Event)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
-			reader <- newObj.(*corev1.Event)
+			opts.eventsReader <- newObj.(*corev1.Event)
 		},
 		DeleteFunc: func(obj interface{}) {
-			reader <- obj.(*corev1.Event)
+			opts.eventsReader <- obj.(*corev1.Event)
 		},
 	})
-	return reader
 }
 
-func watchObjects() chan string {
+func watchObjects(opts KitOptions) chan string {
 	reader := make(chan string)
 
 	// 寻找各个resource之间的关联，获取其id

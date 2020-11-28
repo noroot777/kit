@@ -181,11 +181,7 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericclioptions
 			cmdutil.CheckErr(validateArgs(cmd, args))
 			cmdutil.CheckErr(validatePruneAll(o.Prune, o.All, o.Selector))
 			cmdutil.CheckErr(o.Run())
-			kit.InterceptApply(kit.KitOptions{
-				Namespace: o.Namespace,
-				Objects:   o.objects, // no need call GetObjects() after o.Run() execed??
-				ClientSet: o.ClientSet,
-			})
+			kit.InterceptApply(kit.NewKitOptions(o.Namespace, o.objects, o.ClientSet)) // no need call GetObjects() after o.Run() execed??
 		},
 	}
 

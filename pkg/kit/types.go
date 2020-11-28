@@ -4,10 +4,10 @@ package kit
 type FocusOn int
 
 const (
-	// FocusOnAllNamespace all events
-	FocusOnAllNamespace FocusOn = iota
+	// FocusOnCurrentRelated all events
+	FocusOnCurrentRelated FocusOn = iota
 	// FocusOnCurrentNamespace current namespace's events
 	FocusOnCurrentNamespace
-	// FocusOnCurrentRelated current objects and children's events
-	FocusOnCurrentRelated
+	// FocusOnAllNamespace current objects and children's events
+	FocusOnAllNamespace
 )

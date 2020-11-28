@@ -1,7 +1,7 @@
 package kit
 
 // InterceptApply TODO
-func InterceptApply(o KitOptions) {
+func InterceptApply(o *KitOptions) {
 	stopper := make(chan struct{})
 	o.stopper = stopper
 	// for _, obj := range o.Objects {

@@ -27,7 +27,7 @@ require (
 	github.com/lithammer/dedent v1.1.0
 	github.com/mitchellh/go-wordwrap v1.0.0
 	github.com/moby/term v0.0.0-20200312100748-672ec06f55cd
-	github.com/noroot777/clui v1.2.3
+	github.com/noroot777/clui v1.2.4-0.20201128094016-8d652cb09cb2
 	github.com/nsf/termbox-go v0.0.0-20201124104050-ed494de23a00
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.7.0
