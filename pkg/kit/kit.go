@@ -65,15 +65,18 @@ func UI(opt *KitOptions) {
 
 // TODO set cursor focus
 func createView(opt *KitOptions) {
+	// **************
+	// * 1. draw ui *
+	// **************
 	w, h := termbox.Size()
 	view := ui.AddWindow(0, 0, w, h, "Kubectl Interactive Tool")
 	view.SetBorder(ui.BorderThin)
-	// view.SetBackColor(termbox.ColorDarkGray)
 
+	// frame include txtActivity
 	frmLeft := ui.CreateFrame(view, 50, ui.AutoSize, ui.BorderThin, ui.Fixed)
 	frmLeft.SetTitle(" Activities ")
 
-	// text show activities
+	// TextView show activities
 	txtActivity := ui.CreateTextView(frmLeft, ui.AutoSize, ui.AutoSize, 1)
 	txtActivity.SetShowScroll(false)
 	txtActivity.SetWordWrap(true)
@@ -84,17 +87,19 @@ func createView(opt *KitOptions) {
 	// txtActivity.AddText([]string{" ✅   Namespace created!"})
 	// txtActivity.AddText([]string{" ✖️   Namespace created!"})
 
+	// frame include frmRadio and frmEvents
 	frmRight := ui.CreateFrame(view, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
 	frmRight.SetPack(ui.Vertical)
 	frmRight.SetPaddings(1, 1)
 	frmRight.SetTitle(" Kubernetes Events ")
 
-	// radio to select focus on
+	// frame include radioGroup
 	frmRadio := ui.CreateFrame(frmRight, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
 	frmRadio.SetTitle(" Choose Events Scope ")
 	frmRadio.SetPack(ui.Horizontal)
 	frmRadio.SetPaddings(5, 1)
 	frmRadio.SetAlign(ui.AlignRight)
+	// radio group to select related namespace or objects
 	radioGroup := ui.CreateRadioGroup()
 	radioCR := ui.CreateRadio(frmRadio, ui.AutoSize, "Current related objects", 1)
 	radioCR.SetSelected(false)
@@ -109,10 +114,11 @@ func createView(opt *KitOptions) {
 	radioAN.SetActive(false)
 	radioGroup.AddItem(radioAN)
 
-	// table show events
+	// frame include tabEvents
 	frmEvents := ui.CreateFrame(frmRight, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
 	frmEvents.SetTitle(" Events List ")
 	frmEvents.ResizeChildren()
+	// TableView of events
 	tabEvents := ui.CreateTableView(frmEvents, ui.AutoSize, ui.AutoSize, 1)
 	tabEvents.SetTitle(" Event List ")
 	cols := []ui.Column{
@@ -130,14 +136,56 @@ func createView(opt *KitOptions) {
 	tabEvents.SetShowLines(false)
 	tabEvents.SetShowRowNumber(false)
 
+	// frame include txtEvent
 	frmRightBottom := ui.CreateFrame(frmRight, ui.AutoSize, 10, ui.BorderThin, ui.Fixed)
 	frmRightBottom.SetTitle(" Events Detail ")
-	// text show event detail
+	// TextView show event detail
 	txtEvent := ui.CreateTextView(frmRightBottom, ui.AutoSize, ui.AutoSize, 1)
 	txtEvent.SetShowScroll(false)
 	txtEvent.SetWordWrap(true)
 	txtEvent.SetActive(false)
 
+	// ********************************
+	// * 2. handlers of ui components *
+	// ********************************
+	tabEvents.OnDrawCell(drawCell)
+
+	tabEvents.OnSelectCell(func(column int, row int) {
+		mtx.Lock()
+		defer mtx.Unlock()
+
+		txtEvent.SetText(text(values[row*col : (row+1)*col]))
+	})
+
+	radioGroup.OnSelectItem(func(c *ui.Radio) {
+		var index = -1
+		for i, item := range c.Parent().Children() {
+			if item == c {
+				index = i
+				break
+			}
+		}
+		if int(opt.focusOn) == index {
+			return
+		}
+		tabEvents.SetRowCount(0)
+		switch index {
+		case 0:
+			changeRadioFocus(FocusOnCurrentRelated, opt)
+		case 1:
+			changeRadioFocus(FocusOnCurrentNamespace, opt)
+		case 2:
+			changeRadioFocus(FocusOnAllNamespace, opt)
+		case -1:
+			return
+		}
+		tabEvents.Draw()
+		txtEvent.SetText([]string{""})
+	})
+
+	// ******************************************************
+	// * 3. catch the events from k8s and show in tabEvents *
+	// ******************************************************
 	go func() {
 		for {
 			select {
@@ -155,6 +203,9 @@ func createView(opt *KitOptions) {
 					values...)
 
 				tabEvents.SetRowCount(tabEvents.RowCount() + 1)
+				// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
+				ui.PutEvent(ui.Event{Type: ui.EventRedraw})
+
 				txtEvent.SetText(text(values[:col]))
 
 				mtx.Unlock()
@@ -162,62 +213,6 @@ func createView(opt *KitOptions) {
 		}
 	}()
 
-	tabEvents.OnDrawCell(drawCell)
-
-	tabEvents.OnSelectCell(func(column int, row int) {
-		mtx.Lock()
-		defer mtx.Unlock()
-
-		txtEvent.SetText(text(values[row*col : (row+1)*col]))
-	})
-
-	radioGroup.OnSelectItem(func(c *ui.Radio) {
-		// tabEvents.OnDrawCell(nil)
-		// tabEvents.SetRowCount(0)
-		var index = -1
-		for i, item := range c.Parent().Children() {
-			if item == c {
-				index = i
-				break
-			}
-		}
-		if int(opt.focusOn) == index {
-			return
-		}
-		switch index {
-		case 0:
-			changeRadioFocus(FocusOnCurrentRelated, opt)
-		case 1:
-			changeRadioFocus(FocusOnCurrentNamespace, opt)
-		case 2:
-			changeRadioFocus(FocusOnAllNamespace, opt)
-		case -1:
-			return
-		}
-		tabEvents = createNewTableView()
-		tabEvents.OnDrawCell(drawCell)
-		txtEvent.SetText([]string{""})
-	})
-}
-
-func createNewTableView() *ui.TableView {
-	tabEvents := ui.NewTableView(ui.AutoSize, ui.AutoSize, 1)
-	tabEvents.SetTitle(" Event List ")
-	cols := []ui.Column{
-		{Title: "#", Width: 4, Alignment: ui.AlignLeft},
-		{Title: "LAST_SEEN", Width: 10, Alignment: ui.AlignLeft},
-		{Title: "TYPE", Width: 12, Alignment: ui.AlignLeft},
-		{Title: "REASON", Width: 20, Alignment: ui.AlignLeft},
-		{Title: "OBJECT", Width: 30, Alignment: ui.AlignLeft},
-		{Title: "MESSAGE", Width: 100, Alignment: ui.AlignLeft},
-	}
-	tabEvents.SetColumns(cols)
-	tabEvents.SetRowCount(0)
-	tabEvents.SetShowScroll(false)
-	tabEvents.SetFullRowSelect(true)
-	tabEvents.SetShowLines(false)
-	tabEvents.SetShowRowNumber(false)
-	return tabEvents
 }
 
 func text(v []string) []string {
@@ -238,10 +233,9 @@ func changeRadioFocus(f FocusOn, opts *KitOptions) {
 
 	values = values[0:0]
 	opts.stopper <- struct{}{}
-	// close(opts.eventsReader)
 	opts.focusOn = f
 
-	// watchEvents(opts)
+	watchEvents(opts)
 }
 
 func drawCell(info *ui.ColumnDrawInfo) {
