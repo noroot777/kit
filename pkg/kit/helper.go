@@ -6,17 +6,24 @@ import (
 
 // TextViewWriter write to TextViewWriter
 type TextViewWriter struct {
-	TxtView *ui.TextView
+	errorWriter bool
+	TxtView     *ui.TextView
 }
 
 func (t *TextViewWriter) Write(p []byte) (n int, err error) {
-	t.TxtView.AddText([]string{string(p)})
+	if t.errorWriter {
+		t.TxtView.SetTextColor(ui.ColorRed)
+		t.TxtView.AddText([]string{"  ✖️  " + string(p)})
+	} else {
+		t.TxtView.AddText([]string{"  ✅  " + string(p)})
+	}
 	return len(p), nil
 }
 
 // NewTextViewWriter TODO
-func NewTextViewWriter(o *KitOptions) *TextViewWriter {
+func NewTextViewWriter(o *KitOptions, errorWriter bool) *TextViewWriter {
 	return &TextViewWriter{
-		TxtView: o.TextView,
+		errorWriter: errorWriter,
+		TxtView:     o.TextView,
 	}
 }

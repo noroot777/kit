@@ -184,13 +184,13 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericclioptions
 			// add by kit
 			opt := kit.NewKitOptions(o.Namespace, o.objects, o.ClientSet)
 			kit.InterceptApply(opt) // no need call GetObjects() after o.Run() execed??
-			writer := kit.NewTextViewWriter(opt)
-			o.Out = writer
+			o.Out = kit.NewTextViewWriter(opt, false)
+			o.ErrOut = kit.NewTextViewWriter(opt, true)
 
-			go cmdutil.CheckErr(o.Run())
+			cmdutil.CheckErr(o.Run())
 
 			// add by kit
-			kit.ShowUI()
+			kit.Hold()
 		},
 	}
 

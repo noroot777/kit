@@ -59,14 +59,17 @@ func DrawUI(opt *KitOptions) {
 	ui.InitLibrary()
 	ui.SetThemePath(".")
 	ui.SetCurrentTheme("ui")
-	defer ui.DeinitLibrary()
 
 	watchEvents(opt)
 	createView(opt)
+
+	ui.RefreshScreen()
+	// termbox.Flush()
 }
 
-// ShowUI show term ui
-func ShowUI() {
+// Hold show term ui
+func Hold() {
+	defer ui.DeinitLibrary()
 	ui.MainLoop()
 }
 
@@ -86,8 +89,8 @@ func createView(opt *KitOptions) {
 	frmLeft.SetTitle(" Activities ")
 
 	// TextView show activities
-	txtActivity := opt.TextView
-	txtActivity = ui.CreateTextView(frmLeft, ui.AutoSize, ui.AutoSize, 1)
+	txtActivity := ui.CreateTextView(frmLeft, ui.AutoSize, ui.AutoSize, 1)
+	opt.TextView = txtActivity
 	txtActivity.SetShowScroll(false)
 	txtActivity.SetWordWrap(true)
 	for _, err := range Errors {
