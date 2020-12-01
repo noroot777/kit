@@ -10,5 +10,5 @@ func InterceptApply(o *KitOptions) {
 	// 	fmt.Printf("%+v\n\n", obj.Object)
 	// }
 
-	UI(o)
+	DrawUI(o)
 }

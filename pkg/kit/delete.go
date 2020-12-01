@@ -6,7 +6,7 @@ func InterceptDelete(o *KitOptions) {
 	defer func() { o.stopper <- struct{}{} }()
 	// o.PrintFunc = printProcess
 
-	UI(o)
+	DrawUI(o)
 }
 
 // func printProcess(objets []*resource.Info, txtView *ui.TextView) {

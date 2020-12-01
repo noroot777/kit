@@ -180,8 +180,17 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericclioptions
 			cmdutil.CheckErr(o.Complete(f, cmd))
 			cmdutil.CheckErr(validateArgs(cmd, args))
 			cmdutil.CheckErr(validatePruneAll(o.Prune, o.All, o.Selector))
-			cmdutil.CheckErr(o.Run())
-			kit.InterceptApply(kit.NewKitOptions(o.Namespace, o.objects, o.ClientSet)) // no need call GetObjects() after o.Run() execed??
+
+			// add by kit
+			opt := kit.NewKitOptions(o.Namespace, o.objects, o.ClientSet)
+			kit.InterceptApply(opt) // no need call GetObjects() after o.Run() execed??
+			writer := kit.NewTextViewWriter(opt)
+			o.Out = writer
+
+			go cmdutil.CheckErr(o.Run())
+
+			// add by kit
+			kit.ShowUI()
 		},
 	}
 

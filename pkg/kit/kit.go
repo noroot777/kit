@@ -31,8 +31,10 @@ type KitOptions struct {
 	Namespace string // TODO apply -f, there are multiple namespaces
 	Objects   []*resource.Info
 	ClientSet kubernetes.Interface
+	TextView  *ui.TextView
+	// Writer    *TextViewWriter
 
-	PrintFunc func(objets []*resource.Info, txtView *ui.TextView)
+	// PrintFunc func(objets []*resource.Info, txtView *ui.TextView)
 
 	stopper      chan struct{}
 	eventsReader chan *corev1.Event
@@ -52,8 +54,8 @@ func NewKitOptions(namespace string, objects []*resource.Info, clientSet *kubern
 	}
 }
 
-// UI start a interactive term ui
-func UI(opt *KitOptions) {
+// DrawUI draw a interactive term ui
+func DrawUI(opt *KitOptions) {
 	ui.InitLibrary()
 	ui.SetThemePath(".")
 	ui.SetCurrentTheme("ui")
@@ -61,7 +63,10 @@ func UI(opt *KitOptions) {
 
 	watchEvents(opt)
 	createView(opt)
+}
 
+// ShowUI show term ui
+func ShowUI() {
 	ui.MainLoop()
 }
 
@@ -81,7 +86,8 @@ func createView(opt *KitOptions) {
 	frmLeft.SetTitle(" Activities ")
 
 	// TextView show activities
-	txtActivity := ui.CreateTextView(frmLeft, ui.AutoSize, ui.AutoSize, 1)
+	txtActivity := opt.TextView
+	txtActivity = ui.CreateTextView(frmLeft, ui.AutoSize, ui.AutoSize, 1)
 	txtActivity.SetShowScroll(false)
 	txtActivity.SetWordWrap(true)
 	for _, err := range Errors {
