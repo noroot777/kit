@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	cmdwait "k8s.io/kubectl/pkg/cmd/wait"
+	"k8s.io/kubectl/pkg/kit"
 	"k8s.io/kubectl/pkg/rawhttp"
 	"k8s.io/kubectl/pkg/util/i18n"
 	"k8s.io/kubectl/pkg/util/templates"
@@ -123,6 +124,9 @@ type DeleteOptions struct {
 	Mapper        meta.RESTMapper
 	Result        *resource.Result
 
+	// add by kit
+	objects []*resource.Info
+
 	genericclioptions.IOStreams
 }
 
@@ -141,6 +145,13 @@ func NewCmdDelete(f cmdutil.Factory, streams genericclioptions.IOStreams) *cobra
 			cmdutil.CheckErr(o.Complete(f, args, cmd))
 			cmdutil.CheckErr(o.Validate())
 			cmdutil.CheckErr(o.RunDelete(f))
+
+			// add by kit
+			clientSet, e := f.KubernetesClientSet()
+			cmdutil.CheckErr(e)
+			cmdNamespace, _, err := f.ToRawKubeConfigLoader().Namespace()
+			cmdutil.CheckErr(e)
+			kit.InterceptDelete(kit.NewKitOptions(cmdNamespace, o.objects, clientSet))
 		},
 		SuggestFor: []string{"rm"},
 	}
@@ -386,6 +397,10 @@ func (o *DeleteOptions) DeleteResult(r *resource.Result) error {
 		klog.V(1).Info(err)
 		return nil
 	}
+
+	// add by kit
+	o.objects = deletedInfos
+
 	return err
 }
 

@@ -32,6 +32,8 @@ type KitOptions struct {
 	Objects   []*resource.Info
 	ClientSet kubernetes.Interface
 
+	PrintFunc func(objets []*resource.Info, txtView *ui.TextView)
+
 	stopper      chan struct{}
 	eventsReader chan *corev1.Event
 	focusOn      FocusOn
@@ -69,11 +71,13 @@ func createView(opt *KitOptions) {
 	// * 1. draw ui *
 	// **************
 	w, h := termbox.Size()
-	view := ui.AddWindow(0, 0, w, h, "Kubectl Interactive Tool")
+	view := ui.AddWindow(0, 0, w, h, " Kubectl Interactive Tool ")
 	view.SetBorder(ui.BorderThin)
+	view.SetPack(ui.Vertical)
 
+	frmExTips := ui.CreateFrame(view, ui.AutoSize, ui.AutoSize, ui.BorderNone, ui.AutoSize)
 	// frame include txtActivity
-	frmLeft := ui.CreateFrame(view, 50, ui.AutoSize, ui.BorderThin, ui.Fixed)
+	frmLeft := ui.CreateFrame(frmExTips, 50, ui.AutoSize, ui.BorderThin, ui.Fixed)
 	frmLeft.SetTitle(" Activities ")
 
 	// TextView show activities
@@ -88,7 +92,7 @@ func createView(opt *KitOptions) {
 	// txtActivity.AddText([]string{" ✖️   Namespace created!"})
 
 	// frame include frmRadio and frmEvents
-	frmRight := ui.CreateFrame(view, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
+	frmRight := ui.CreateFrame(frmExTips, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
 	frmRight.SetPack(ui.Vertical)
 	frmRight.SetPaddings(1, 1)
 	frmRight.SetTitle(" Kubernetes Events ")
@@ -139,15 +143,46 @@ func createView(opt *KitOptions) {
 	// frame include txtEvent
 	frmRightBottom := ui.CreateFrame(frmRight, ui.AutoSize, 10, ui.BorderThin, ui.Fixed)
 	frmRightBottom.SetTitle(" Events Detail ")
+	frmRightBottom.SetPack(ui.Vertical)
 	// TextView show event detail
 	txtEvent := ui.CreateTextView(frmRightBottom, ui.AutoSize, ui.AutoSize, 1)
 	txtEvent.SetShowScroll(false)
 	txtEvent.SetWordWrap(true)
 	txtEvent.SetActive(false)
 
+	frmTips := ui.CreateFrame(view, ui.AutoSize, ui.AutoSize, ui.BorderNone, ui.Fixed)
+	txtTips := ui.CreateTextView(frmTips, ui.AutoSize, 1, 1)
+	txtTips.SetText([]string{" * ctrl+e: change interactive mode - text selection or mouse;   ctrl+q: exit;   esc: exit;   or click the top right corner to exit;"})
+	txtTips.SetTextColor(termbox.ColorDarkGray | termbox.AttrBold)
+
 	// ********************************
 	// * 2. handlers of ui components *
 	// ********************************
+
+	// Key press handler
+	//   1. press ctrl+e to change the input mode
+	//      termbox.InputEsc | termbox.InputMouse: interactive mode, mouse enable, text selection disable
+	//      termbox.InputEsc: traditional mode, mouse disable, text selection enable
+	//   2. press ctl+q to exit ui
+	inputEscMode := false
+	view.OnKeyDown(func(e ui.Event, data interface{}) bool {
+		switch e.Key {
+		case termbox.KeyCtrlE:
+			if inputEscMode {
+				termbox.SetInputMode(termbox.InputEsc | termbox.InputMouse)
+				ui.Reset()
+				inputEscMode = false
+			} else {
+				termbox.SetInputMode(termbox.InputEsc)
+				ui.Reset()
+				inputEscMode = true
+			}
+		case termbox.KeyCtrlQ, termbox.KeyEsc:
+			ui.PutEvent(ui.Event{Type: ui.EventCloseWindow})
+		}
+		return true
+	}, inputEscMode)
+
 	tabEvents.OnDrawCell(drawCell)
 
 	tabEvents.OnSelectCell(func(column int, row int) {
