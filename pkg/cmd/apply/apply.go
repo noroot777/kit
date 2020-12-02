@@ -177,15 +177,18 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericclioptions
 		Long:                  applyLong,
 		Example:               applyExample,
 		Run: func(cmd *cobra.Command, args []string) {
+			// add by kit
+			clientSet, e := f.KubernetesClientSet()
+			cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
+			cmdutil.CheckErr(e)
+			opt := kit.NewOptions(cmdNamespace, o.objects, clientSet)
+			kit.InterceptApply(opt) // no need call GetObjects() after o.Run() execed??
+			o.Out = kit.NewUIWriter(opt, false)
+			o.ErrOut = kit.NewUIWriter(opt, true)
+
 			cmdutil.CheckErr(o.Complete(f, cmd))
 			cmdutil.CheckErr(validateArgs(cmd, args))
 			cmdutil.CheckErr(validatePruneAll(o.Prune, o.All, o.Selector))
-
-			// add by kit
-			opt := kit.NewKitOptions(o.Namespace, o.objects, o.ClientSet)
-			kit.InterceptApply(opt) // no need call GetObjects() after o.Run() execed??
-			o.Out = kit.NewTextViewWriter(opt, false)
-			o.ErrOut = kit.NewTextViewWriter(opt, true)
 
 			cmdutil.CheckErr(o.Run())
 

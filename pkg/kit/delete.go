@@ -1,7 +1,7 @@
 package kit
 
 // InterceptDelete TODO
-func InterceptDelete(o *KitOptions) {
+func InterceptDelete(o *Options) {
 	o.stopper = make(chan struct{})
 	defer func() { o.stopper <- struct{}{} }()
 	// o.PrintFunc = printProcess

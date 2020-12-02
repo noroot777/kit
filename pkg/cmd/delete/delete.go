@@ -141,18 +141,17 @@ func NewCmdDelete(f cmdutil.Factory, streams genericclioptions.IOStreams) *cobra
 		Example:               deleteExample,
 		Run: func(cmd *cobra.Command, args []string) {
 			o, err := deleteFlags.ToOptions(nil, streams)
+			cmdutil.CheckErr(err)
 
 			// add by kit
 			clientSet, e := f.KubernetesClientSet()
+			cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
 			cmdutil.CheckErr(e)
-			cmdNamespace, _, err := f.ToRawKubeConfigLoader().Namespace()
-			cmdutil.CheckErr(e)
-			opt := kit.NewKitOptions(cmdNamespace, o.objects, clientSet)
+			opt := kit.NewOptions(cmdNamespace, o.objects, clientSet)
 			kit.InterceptDelete(opt)
-			o.Out = kit.NewTextViewWriter(opt, false)
-			o.ErrOut = kit.NewTextViewWriter(opt, true)
+			o.Out = kit.NewUIWriter(opt, false)
+			o.ErrOut = kit.NewUIWriter(opt, true)
 
-			cmdutil.CheckErr(err)
 			cmdutil.CheckErr(o.Complete(f, args, cmd))
 			cmdutil.CheckErr(o.Validate())
 

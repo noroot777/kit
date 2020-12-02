@@ -21,7 +21,7 @@ func TestWatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	o := NewKitOptions("", nil, clientSet)
+	o := NewOptions("", nil, clientSet)
 	watchEvents(o)
 	for {
 		select {

@@ -26,13 +26,13 @@ var (
 	col = 6
 )
 
-// KitOptions TODO
-type KitOptions struct {
+// Options TODO
+type Options struct {
 	Namespace string // TODO apply -f, there are multiple namespaces
 	Objects   []*resource.Info
 	ClientSet kubernetes.Interface
 	TextView  *ui.TextView
-	// Writer    *TextViewWriter
+	// Writer    *UIWriter
 
 	// PrintFunc func(objets []*resource.Info, txtView *ui.TextView)
 
@@ -41,21 +41,21 @@ type KitOptions struct {
 	focusOn      FocusOn
 }
 
-// NewKitOptions create new KitOptions
-func NewKitOptions(namespace string, objects []*resource.Info, clientSet *kubernetes.Clientset) *KitOptions {
-	return &KitOptions{
+// NewOptions create new Options
+func NewOptions(namespace string, objects []*resource.Info, clientSet *kubernetes.Clientset) *Options {
+	return &Options{
 		Namespace: namespace,
 		Objects:   objects,
 		ClientSet: clientSet,
 
 		stopper:      make(chan struct{}),
-		eventsReader: make(chan *corev1.Event),
+		eventsReader: make(chan *corev1.Event, 100),
 		focusOn:      FocusOnCurrentNamespace,
 	}
 }
 
 // DrawUI draw a interactive term ui
-func DrawUI(opt *KitOptions) {
+func DrawUI(opt *Options) {
 	ui.InitLibrary()
 	ui.SetThemePath(".")
 	ui.SetCurrentTheme("ui")
@@ -74,7 +74,7 @@ func Hold() {
 }
 
 // TODO set cursor focus
-func createView(opt *KitOptions) {
+func createView(opt *Options) {
 	// **************
 	// * 1. draw ui *
 	// **************
@@ -271,7 +271,7 @@ func text(v []string) []string {
 	return t
 }
 
-func changeRadioFocus(f FocusOn, opts *KitOptions) {
+func changeRadioFocus(f FocusOn, opts *Options) {
 	mtx.Lock()
 	defer mtx.Unlock()
 
@@ -291,7 +291,7 @@ func drawCell(info *ui.ColumnDrawInfo) {
 	}
 }
 
-func watchEvents(opts *KitOptions) {
+func watchEvents(opts *Options) {
 	var siOpts []informers.SharedInformerOption
 	if opts.focusOn != FocusOnAllNamespace {
 		siOpts = append(siOpts, informers.WithNamespace(opts.Namespace))
@@ -308,19 +308,34 @@ func watchEvents(opts *KitOptions) {
 
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
+			defer func() {
+				if err := recover(); err != nil {
+					opts.TextView.AddText([]string{fmt.Sprintf("%v", err)})
+				}
+			}()
 			// TODO filter related objects
 			opts.eventsReader <- obj.(*corev1.Event)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
+			defer func() {
+				if err := recover(); err != nil {
+					opts.TextView.AddText([]string{fmt.Sprintf("%v", err)})
+				}
+			}()
 			opts.eventsReader <- newObj.(*corev1.Event)
 		},
 		DeleteFunc: func(obj interface{}) {
+			defer func() {
+				if err := recover(); err != nil {
+					opts.TextView.AddText([]string{fmt.Sprintf("%v", err)})
+				}
+			}()
 			opts.eventsReader <- obj.(*corev1.Event)
 		},
 	})
 }
 
-func watchObjects(opts KitOptions) chan string {
+func watchObjects(opts Options) chan string {
 	reader := make(chan string)
 
 	// 寻找各个resource之间的关联，获取其id
