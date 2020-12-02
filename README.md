@@ -7,4 +7,4 @@ Forked from kubectl on master branch. On this fork, the *writing* commands(like 
 
 # Supported commands(at present)
 - apply
--delete
+- delete
