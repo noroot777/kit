@@ -61,11 +61,11 @@ func Intercept(fn InterceptFunc, o *Options) {
 
 	fn(o)
 
-	DrawUI(o)
+	drawUI(o)
 }
 
-// DrawUI draw a interactive term ui
-func DrawUI(opt *Options) {
+// drawUI draw a interactive term ui
+func drawUI(opt *Options) {
 	ui.InitLibrary()
 	ui.SetThemePath(".")
 	ui.SetCurrentTheme("ui")

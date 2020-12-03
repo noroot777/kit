@@ -2,11 +2,11 @@ package kit
 
 // InterceptDelete TODO
 func InterceptDelete(o *Options) {
-	o.stopper = make(chan struct{})
-	defer func() { o.stopper <- struct{}{} }()
-	// o.PrintFunc = printProcess
+	// o.stopper = make(chan struct{})
+	// defer func() { o.stopper <- struct{}{} }()
+	// // o.PrintFunc = printProcess
 
-	DrawUI(o)
+	// DrawUI(o)
 }
 
 // func printProcess(objets []*resource.Info, txtView *ui.TextView) {
