@@ -148,7 +148,7 @@ func NewCmdDelete(f cmdutil.Factory, streams genericclioptions.IOStreams) *cobra
 			cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
 			cmdutil.CheckErr(e)
 			opt := kit.NewOptions(cmdNamespace, o.objects, clientSet)
-			kit.InterceptDelete(opt)
+			kit.Intercept(kit.InterceptDelete, opt)
 			o.Out = kit.NewUIWriter(opt, false)
 			o.ErrOut = kit.NewUIWriter(opt, true)
 

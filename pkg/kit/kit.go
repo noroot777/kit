@@ -54,6 +54,16 @@ func NewOptions(namespace string, objects []*resource.Info, clientSet *kubernete
 	}
 }
 
+// Intercept intercept the command exec
+func Intercept(fn InterceptFunc, o *Options) {
+	o.stopper = make(chan struct{})
+	defer func() { o.stopper <- struct{}{} }()
+
+	fn(o)
+
+	DrawUI(o)
+}
+
 // DrawUI draw a interactive term ui
 func DrawUI(opt *Options) {
 	ui.InitLibrary()

@@ -11,3 +11,6 @@ const (
 	// FocusOnAllNamespace current objects and children's events
 	FocusOnAllNamespace
 )
+
+// InterceptFunc the Interceptors's main function
+type InterceptFunc func(o *Options)
