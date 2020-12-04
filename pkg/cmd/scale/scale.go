@@ -30,6 +30,7 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/kubernetes"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"k8s.io/kubectl/pkg/kit"
 	"k8s.io/kubectl/pkg/scale"
 	"k8s.io/kubectl/pkg/util/i18n"
 	"k8s.io/kubectl/pkg/util/templates"
@@ -114,9 +115,23 @@ func NewCmdScale(f cmdutil.Factory, ioStreams genericclioptions.IOStreams) *cobr
 		Long:                  scaleLong,
 		Example:               scaleExample,
 		Run: func(cmd *cobra.Command, args []string) {
+
+			// add by kit
+			clientSet, e := f.KubernetesClientSet()
+			cmdutil.CheckErr(e)
+			cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
+			cmdutil.CheckErr(e)
+			opt := kit.NewOptions(cmdNamespace, nil, clientSet)
+			kit.Intercept(nil, opt)
+			o.Out = kit.NewUIWriter(opt, false)
+			o.ErrOut = kit.NewUIWriter(opt, true)
+
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Validate(cmd))
 			cmdutil.CheckErr(o.RunScale())
+
+			// add by kit
+			kit.Hold()
 		},
 		ValidArgs: validArgs,
 	}

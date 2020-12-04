@@ -179,6 +179,7 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericclioptions
 		Run: func(cmd *cobra.Command, args []string) {
 			// add by kit
 			clientSet, e := f.KubernetesClientSet()
+			cmdutil.CheckErr(e)
 			cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
 			cmdutil.CheckErr(e)
 			opt := kit.NewOptions(cmdNamespace, o.objects, clientSet)

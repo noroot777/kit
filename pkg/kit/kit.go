@@ -59,7 +59,9 @@ func Intercept(fn InterceptFunc, o *Options) {
 	o.stopper = make(chan struct{})
 	defer func() { o.stopper <- struct{}{} }()
 
-	fn(o)
+	if fn != nil {
+		fn(o)
+	}
 
 	drawUI(o)
 }
@@ -348,9 +350,20 @@ func watchEvents(opts *Options) {
 func watchObjects(opts Options) chan string {
 	reader := make(chan string)
 
+	var siOpts []informers.SharedInformerOption
+	if opts.focusOn != FocusOnAllNamespace {
+		siOpts = append(siOpts, informers.WithNamespace(opts.Namespace))
+	}
+	f := informers.NewSharedInformerFactoryWithOptions(opts.ClientSet, 0, siOpts...)
+	defer runtime.HandleCrash()
+
+	go f.Start(opts.stopper)
+
 	// 寻找各个resource之间的关联，获取其id
 	// 找出存在status的resource，并标注哪些状态是成功状态
 	for _, obj := range opts.Objects {
+		// informer, err := f.ForResource(opts.Objects[0].Mapping.Resource)
+
 		if obj.Mapping.GroupVersionKind.Kind == "namespace" {
 
 		}
