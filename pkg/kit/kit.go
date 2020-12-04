@@ -23,7 +23,7 @@ var (
 	// values lock
 	mtx sync.RWMutex
 	// column count of Event table(include the NO. column)
-	col = 6
+	ColumnNum = 6
 )
 
 // Options TODO
@@ -206,11 +206,21 @@ func createView(opt *Options) {
 
 	tabEvents.OnDrawCell(drawCell)
 
-	tabEvents.OnSelectCell(func(column int, row int) {
+	tabEvents.OnSelectCell(func(selectedCol int, selectedRow int) {
 		mtx.Lock()
 		defer mtx.Unlock()
 
-		txtEvent.SetText(text(values[row*col : (row+1)*col]))
+		txtEvent.SetText(text(values[selectedRow*ColumnNum : (selectedRow+1)*ColumnNum]))
+		/*
+			// set front groud normalize
+			selectCols := tabEvents.Columns()
+			// selectCols := allCols[selectedRow*col : (selectedRow+1)*col]
+			for i, c := range selectCols {
+				c.Fg = ui.ColorRed
+				// tabEvents.cel
+				tabEvents.SetColumnInfo((selectedRow*ColumnNum + i), c)
+			}
+		*/
 	})
 
 	radioGroup.OnSelectItem(func(c *ui.Radio) {
@@ -250,7 +260,7 @@ func createView(opt *Options) {
 
 				values = append(
 					[]string{
-						strconv.Itoa(len(values)/col + 1),
+						strconv.Itoa(len(values)/ColumnNum + 1),
 						event.LastTimestamp.Format("15:04:05"),
 						event.Type,
 						event.Reason,
@@ -262,7 +272,7 @@ func createView(opt *Options) {
 				// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
 				ui.PutEvent(ui.Event{Type: ui.EventRedraw})
 
-				txtEvent.SetText(text(values[:col]))
+				txtEvent.SetText(text(values[:ColumnNum]))
 
 				mtx.Unlock()
 			}
@@ -299,7 +309,8 @@ func drawCell(info *ui.ColumnDrawInfo) {
 	defer mtx.Unlock()
 
 	if len(values) > 0 {
-		info.Text = values[info.Row*col+info.Col]
+		info.Text = values[info.Row*ColumnNum+info.Col]
+		// info.Fg = ui.ColorYellowBold
 	}
 }
 
@@ -310,6 +321,7 @@ func watchEvents(opts *Options) {
 	}
 	f := informers.NewSharedInformerFactoryWithOptions(opts.ClientSet, 0, siOpts...)
 	informer := f.Core().V1().Events().Informer()
+	informer.GetIndexer()
 	defer runtime.HandleCrash()
 
 	go f.Start(opts.stopper)
