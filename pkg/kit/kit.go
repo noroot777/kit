@@ -22,8 +22,10 @@ var (
 	values []string
 	// values lock
 	mtx sync.RWMutex
-	// column count of Event table(include the NO. column)
-	ColumnNum = 6
+	// count of Event table(include the NO. column)
+	columnCount = 6
+	// to keep current status
+	curr *Current
 )
 
 // Options TODO
@@ -38,7 +40,6 @@ type Options struct {
 
 	stopper      chan struct{}
 	eventsReader chan *corev1.Event
-	focusOn      FocusOn
 }
 
 // NewOptions create new Options
@@ -50,7 +51,6 @@ func NewOptions(namespace string, objects []*resource.Info, clientSet *kubernete
 
 		stopper:      make(chan struct{}),
 		eventsReader: make(chan *corev1.Event, 100),
-		focusOn:      FocusOnCurrentNamespace,
 	}
 }
 
@@ -58,6 +58,7 @@ func NewOptions(namespace string, objects []*resource.Info, clientSet *kubernete
 func Intercept(fn InterceptFunc, o *Options) {
 	o.stopper = make(chan struct{})
 	defer func() { o.stopper <- struct{}{} }()
+	curr = NewCurrent()
 
 	if fn != nil {
 		fn(o)
@@ -210,18 +211,9 @@ func createView(opt *Options) {
 		mtx.Lock()
 		defer mtx.Unlock()
 
-		txtEvent.SetText(text(values[selectedRow*ColumnNum : (selectedRow+1)*ColumnNum]))
+		txtEvent.SetText(text(values[selectedRow*columnCount : (selectedRow+1)*columnCount]))
 		tabEvents.SetSelectedRow(selectedRow)
-		/*
-			// set front groud normalize
-			selectCols := tabEvents.Columns()
-			// selectCols := allCols[selectedRow*col : (selectedRow+1)*col]
-			for i, c := range selectCols {
-				c.Fg = ui.ColorRed
-				// tabEvents.cel
-				tabEvents.SetColumnInfo((selectedRow*ColumnNum + i), c)
-			}
-		*/
+		curr.VisitedMap[selectedRow] = selectedRow
 	})
 
 	radioGroup.OnSelectItem(func(c *ui.Radio) {
@@ -232,13 +224,13 @@ func createView(opt *Options) {
 				break
 			}
 		}
-		if int(opt.focusOn) == index {
+		if int(curr.SelectedRadio) == index {
 			return
 		}
 		tabEvents.SetRowCount(0)
 		switch index {
 		case 0:
-			changeRadioFocus(FocusOnCurrentRelated, opt)
+			changeRadioFocus(FocusOnInvolved, opt)
 		case 1:
 			changeRadioFocus(FocusOnCurrentNamespace, opt)
 		case 2:
@@ -261,7 +253,7 @@ func createView(opt *Options) {
 
 				values = append(
 					[]string{
-						strconv.Itoa(len(values)/ColumnNum + 1),
+						strconv.Itoa(len(values)/columnCount + 1),
 						event.LastTimestamp.Format("15:04:05"),
 						event.Type,
 						event.Reason,
@@ -273,7 +265,7 @@ func createView(opt *Options) {
 				// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
 				ui.PutEvent(ui.Event{Type: ui.EventRedraw})
 
-				txtEvent.SetText(text(values[:ColumnNum]))
+				txtEvent.SetText(text(values[:columnCount]))
 
 				mtx.Unlock()
 			}
@@ -300,7 +292,7 @@ func changeRadioFocus(f FocusOn, opts *Options) {
 
 	values = values[0:0]
 	opts.stopper <- struct{}{}
-	opts.focusOn = f
+	curr.Set(f)
 
 	watchEvents(opts)
 }
@@ -310,14 +302,23 @@ func drawCell(info *ui.ColumnDrawInfo) {
 	defer mtx.Unlock()
 
 	if len(values) > 0 {
-		info.Text = values[info.Row*ColumnNum+info.Col]
-		// info.Fg = ui.ColorYellowBold
+		info.Text = values[info.Row*columnCount+info.Col]
+		// set visited row's bg color
+		if _, has := curr.VisitedMap[info.Row]; has {
+			if info.RowSelected {
+				info.Fg = ui.ColorWhiteBold
+			} else {
+				info.Fg = ui.ColorWhite
+			}
+		} else {
+			info.Fg = ui.ColorYellow
+		}
 	}
 }
 
 func watchEvents(opts *Options) {
 	var siOpts []informers.SharedInformerOption
-	if opts.focusOn != FocusOnAllNamespace {
+	if curr.SelectedRadio != FocusOnAllNamespace {
 		siOpts = append(siOpts, informers.WithNamespace(opts.Namespace))
 	}
 	f := informers.NewSharedInformerFactoryWithOptions(opts.ClientSet, 0, siOpts...)
@@ -364,7 +365,7 @@ func watchObjects(opts Options) chan string {
 	reader := make(chan string)
 
 	var siOpts []informers.SharedInformerOption
-	if opts.focusOn != FocusOnAllNamespace {
+	if curr.SelectedRadio != FocusOnAllNamespace {
 		siOpts = append(siOpts, informers.WithNamespace(opts.Namespace))
 	}
 	f := informers.NewSharedInformerFactoryWithOptions(opts.ClientSet, 0, siOpts...)

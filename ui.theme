@@ -70,7 +70,7 @@ BarChartText=white
 // table view
 TableText=white
 TableBack=black
-TableSelectedText=white
+TableSelectedText=white bold
 TableSelectedBack=black bold
 TableActiveCellText=white bold
 TableActiveCellBack=black bold
