@@ -126,7 +126,7 @@ func createView(opt *Options) {
 	frmRadio.SetAlign(ui.AlignRight)
 	// radio group to select related namespace or objects
 	radioGroup := ui.CreateRadioGroup()
-	radioCR := ui.CreateRadio(frmRadio, ui.AutoSize, "Current related objects", 1)
+	radioCR := ui.CreateRadio(frmRadio, ui.AutoSize, "Involved objects", 1)
 	radioCR.SetSelected(false)
 	radioCR.SetActive(false)
 	radioGroup.AddItem(radioCR)
@@ -211,6 +211,7 @@ func createView(opt *Options) {
 		defer mtx.Unlock()
 
 		txtEvent.SetText(text(values[selectedRow*ColumnNum : (selectedRow+1)*ColumnNum]))
+		tabEvents.SetSelectedRow(selectedRow)
 		/*
 			// set front groud normalize
 			selectCols := tabEvents.Columns()
