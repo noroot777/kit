@@ -1,6 +1,7 @@
-package kit
+package kit2
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"sync"
@@ -8,6 +9,7 @@ import (
 	ui "github.com/noroot777/clui"
 	termbox "github.com/nsf/termbox-go"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/cli-runtime/pkg/resource"
@@ -74,7 +76,7 @@ func drawUI(opt *Options) {
 	ui.SetThemePath(".")
 	ui.SetCurrentTheme("ui")
 
-	watchEvents(opt)
+	watchEvents1(opt)
 	createView(opt)
 
 	ui.RefreshScreen()
@@ -270,6 +272,28 @@ func createView(opt *Options) {
 				txtEvent.SetText(text(values[:columnCount]))
 
 				mtx.Unlock()
+				// case e, _ := <-opt.eventsReader1:
+				// 	mtx.Lock()
+				// 	event := e.Object.(*corev1.Event)
+
+				// 	values = append(
+				// 		[]string{
+				// 			strconv.Itoa(len(values)/columnCount + 1),
+				// 			event.LastTimestamp.Format("15:04:05"),
+				// 			event.Type,
+				// 			event.Reason,
+				// 			event.InvolvedObject.Name,
+				// 			event.Message},
+				// 		values...)
+
+				// 	tabEvents.SetRowCount(tabEvents.RowCount() + 1)
+				// 	curr.MoveEach()
+				// 	// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
+				// 	ui.PutEvent(ui.Event{Type: ui.EventRedraw})
+
+				// 	txtEvent.SetText(text(values[:columnCount]))
+
+				// 	mtx.Unlock()
 			}
 		}
 	}()
@@ -294,9 +318,10 @@ func changeRadioFocus(f FocusOn, opts *Options) {
 
 	values = values[0:0]
 	opts.stopper <- struct{}{}
+	// TODO stop watch watchEvents1
 	curr.SetSelectedRadio(f)
 
-	watchEvents(opts)
+	watchEvents1(opts)
 }
 
 func drawCell(info *ui.ColumnDrawInfo) {
@@ -316,6 +341,14 @@ func drawCell(info *ui.ColumnDrawInfo) {
 			info.Fg = ui.ColorYellowBold
 		}
 	}
+}
+
+func watchEvents1(opts *Options) {
+	watcher, err := opts.ClientSet.CoreV1().Events("").Watch(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		opts.errorWriter.Write([]byte(err.Error()))
+	}
+	opts.eventsReader1 = watcher.ResultChan()
 }
 
 func watchEvents(opts *Options) {

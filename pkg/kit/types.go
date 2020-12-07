@@ -1,5 +1,9 @@
 package kit
 
+import (
+	mapset "github.com/deckarep/golang-set"
+)
+
 // FocusOn event scope. Use to filter events
 type FocusOn int
 
@@ -18,55 +22,60 @@ type InterceptFunc func(o *Options)
 // Current for current status
 type Current struct {
 	SelectedRadio FocusOn
-	VisitedMap    map[int]int
-	// row numbers map of visited
-	visitedRows1 map[int]int // for tab 1: Involved Objects
-	visitedRows2 map[int]int // for tab 2: Current namespace
-	visitedRows3 map[int]int // for tab 3: all namespaces
+	VisitedSet    mapset.Set
+	// row numbers set of visited
+	visitedRows01 mapset.Set // for tab 1: Involved Objects
+	visitedRows02 mapset.Set // for tab 2: Current namespace
+	visitedRows03 mapset.Set // for tab 3: all namespaces
 }
 
 // NewCurrent creates a new Current
 func NewCurrent() *Current {
 	curr := &Current{
 		// row numbers map of visited
-		visitedRows1: make(map[int]int),
-		visitedRows2: make(map[int]int),
-		visitedRows3: make(map[int]int),
+		visitedRows01: mapset.NewSet(),
+		visitedRows02: mapset.NewSet(),
+		visitedRows03: mapset.NewSet(),
 	}
 	// default selected radio is No.2
-	curr.Set(FocusOnCurrentNamespace)
+	curr.SetSelectedRadio(FocusOnCurrentNamespace)
 	return curr
 }
 
-// Set set which radio selected now
-func (c *Current) Set(currentRadio FocusOn) {
+// SetSelectedRadio set which radio selected now
+func (c *Current) SetSelectedRadio(currentRadio FocusOn) {
 	c.SelectedRadio = currentRadio
 
 	switch currentRadio {
 	case FocusOnInvolved:
-		c.VisitedMap = c.visitedRows1
+		c.VisitedSet = c.visitedRows01
 	case FocusOnCurrentNamespace:
-		c.VisitedMap = c.visitedRows2
+		c.VisitedSet = c.visitedRows02
 	case FocusOnAllNamespace:
-		c.VisitedMap = c.visitedRows3
+		c.VisitedSet = c.visitedRows03
 	}
 }
 
-func (c *Current) MoveDownOnStep() {
+// MoveEach bcz the items in tableview is reverse order, so when a
+// new event comes, the items in visitset should +1.
+func (c *Current) MoveEach() {
+	rows := c.VisitedSet.ToSlice()
+	if len(rows) == 0 {
+		return
+	}
+	for i, row := range rows {
+		rows[i] = row.(int) + 1
+	}
 
-	// 由于tab是倒序排列，所以有新数据时，访问过的map中的key需要加1
-	// 当k8schan中有值时调用此方法，此方法中将map中所有的k值加1
-	// 如何动态的加1
-	// for k := range c.visitedRows1 {
-	// 	delete(c.visitedRows1, k)
-	// 	c.visitedRows1[k+1] = k + 1
-	// }
-	// for k := range c.visitedRows2 {
-	// 	delete(c.visitedRows2, k)
-	// 	c.visitedRows2[k+1] = k + 1
-	// }
-	// for k := range c.visitedRows3 {
-	// 	delete(c.visitedRows3, k)
-	// 	c.visitedRows3[k+1] = k + 1
-	// }
+	switch c.SelectedRadio {
+	case FocusOnInvolved:
+		c.visitedRows01 = mapset.NewSet(rows...)
+		c.VisitedSet = c.visitedRows01
+	case FocusOnCurrentNamespace:
+		c.visitedRows02 = mapset.NewSet(rows...)
+		c.VisitedSet = c.visitedRows02
+	case FocusOnAllNamespace:
+		c.visitedRows03 = mapset.NewSet(rows...)
+		c.VisitedSet = c.visitedRows03
+	}
 }

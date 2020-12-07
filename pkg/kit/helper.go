@@ -22,8 +22,14 @@ func (t *UIWriter) Write(p []byte) (n int, err error) {
 
 // NewUIWriter TODO
 func NewUIWriter(o *Options, errorWriter bool) *UIWriter {
-	return &UIWriter{
+	w := &UIWriter{
 		errorWriter: errorWriter,
 		TxtView:     o.TextView,
 	}
+	if errorWriter {
+		o.errorWriter = w
+	} else {
+		o.writer = w
+	}
+	return w
 }
