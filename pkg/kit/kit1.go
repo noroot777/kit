@@ -1,4 +1,4 @@
-package kit2
+package kit
 
 import (
 	"context"
@@ -10,12 +10,9 @@ import (
 	termbox "github.com/nsf/termbox-go"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/cli-runtime/pkg/resource"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 )
 
 var (
@@ -38,11 +35,11 @@ type Options struct {
 	ClientSet kubernetes.Interface
 	TextView  *ui.TextView
 
-	writer        *UIWriter
-	errorWriter   *UIWriter
-	stopper       chan struct{}
-	eventsReader  chan *corev1.Event
-	eventsReader1 <-chan watch.Event
+	writer      *UIWriter
+	errorWriter *UIWriter
+	watcher     watch.Interface
+
+	latestVersion, latestVersionAllNamespace string
 }
 
 // NewOptions create new Options
@@ -51,17 +48,17 @@ func NewOptions(namespace string, objects []*resource.Info, clientSet *kubernete
 		Namespace: namespace,
 		Objects:   objects,
 		ClientSet: clientSet,
-
-		stopper:      make(chan struct{}),
-		eventsReader: make(chan *corev1.Event, 100),
 	}
 }
 
 // Intercept intercept the command exec
 func Intercept(fn InterceptFunc, o *Options) {
-	o.stopper = make(chan struct{})
-	defer func() { o.stopper <- struct{}{} }()
 	curr = NewCurrent()
+	err := latestResourceVersion(o)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	if fn != nil {
 		fn(o)
@@ -76,7 +73,7 @@ func drawUI(opt *Options) {
 	ui.SetThemePath(".")
 	ui.SetCurrentTheme("ui")
 
-	watchEvents1(opt)
+	watchEvents(opt)
 	createView(opt)
 
 	ui.RefreshScreen()
@@ -89,7 +86,6 @@ func Hold() {
 	ui.MainLoop()
 }
 
-// TODO set cursor focus
 func createView(opt *Options) {
 	// **************
 	// * 1. draw ui *
@@ -251,49 +247,33 @@ func createView(opt *Options) {
 	go func() {
 		for {
 			select {
-			case event, _ := <-opt.eventsReader:
+			case e, ok := <-opt.watcher.ResultChan():
+				if !ok {
+					continue
+				}
 				mtx.Lock()
+				switch e.Object.(type) {
+				case *corev1.Event:
+					event := e.Object.(*corev1.Event)
+					values = append(
+						[]string{
+							strconv.Itoa(len(values)/columnCount + 1),
+							event.LastTimestamp.Format("15:04:05"),
+							event.Type,
+							event.Reason,
+							event.InvolvedObject.Name,
+							event.Message},
+						values...)
 
-				values = append(
-					[]string{
-						strconv.Itoa(len(values)/columnCount + 1),
-						event.LastTimestamp.Format("15:04:05"),
-						event.Type,
-						event.Reason,
-						event.InvolvedObject.Name,
-						event.Message},
-					values...)
+					tabEvents.SetRowCount(tabEvents.RowCount() + 1)
+					curr.MoveEach()
+					// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
+					ui.PutEvent(ui.Event{Type: ui.EventRedraw})
 
-				tabEvents.SetRowCount(tabEvents.RowCount() + 1)
-				curr.MoveEach()
-				// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
-				ui.PutEvent(ui.Event{Type: ui.EventRedraw})
-
-				txtEvent.SetText(text(values[:columnCount]))
+					txtEvent.SetText(text(values[:columnCount]))
+				}
 
 				mtx.Unlock()
-				// case e, _ := <-opt.eventsReader1:
-				// 	mtx.Lock()
-				// 	event := e.Object.(*corev1.Event)
-
-				// 	values = append(
-				// 		[]string{
-				// 			strconv.Itoa(len(values)/columnCount + 1),
-				// 			event.LastTimestamp.Format("15:04:05"),
-				// 			event.Type,
-				// 			event.Reason,
-				// 			event.InvolvedObject.Name,
-				// 			event.Message},
-				// 		values...)
-
-				// 	tabEvents.SetRowCount(tabEvents.RowCount() + 1)
-				// 	curr.MoveEach()
-				// 	// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
-				// 	ui.PutEvent(ui.Event{Type: ui.EventRedraw})
-
-				// 	txtEvent.SetText(text(values[:columnCount]))
-
-				// 	mtx.Unlock()
 			}
 		}
 	}()
@@ -317,11 +297,10 @@ func changeRadioFocus(f FocusOn, opts *Options) {
 	defer mtx.Unlock()
 
 	values = values[0:0]
-	opts.stopper <- struct{}{}
-	// TODO stop watch watchEvents1
+	opts.watcher.Stop()
 	curr.SetSelectedRadio(f)
 
-	watchEvents1(opts)
+	watchEvents(opts)
 }
 
 func drawCell(info *ui.ColumnDrawInfo) {
@@ -343,81 +322,86 @@ func drawCell(info *ui.ColumnDrawInfo) {
 	}
 }
 
-func watchEvents1(opts *Options) {
-	watcher, err := opts.ClientSet.CoreV1().Events("").Watch(context.TODO(), metav1.ListOptions{})
+func watchEvents(opts *Options) {
+	var ns string = ""
+	var version = ""
+	switch curr.SelectedRadio {
+	case FocusOnInvolved, FocusOnCurrentNamespace:
+		ns = opts.Namespace
+		version = opts.latestVersion
+	case FocusOnAllNamespace:
+		ns = ""
+		version = opts.latestVersionAllNamespace
+	}
+	watcher, err := opts.ClientSet.CoreV1().Events(ns).Watch(context.TODO(), metav1.ListOptions{ResourceVersion: version})
 	if err != nil {
 		opts.errorWriter.Write([]byte(err.Error()))
 	}
-	opts.eventsReader1 = watcher.ResultChan()
+	opts.watcher = watcher
 }
 
-func watchEvents(opts *Options) {
-	var siOpts []informers.SharedInformerOption
-	if curr.SelectedRadio != FocusOnAllNamespace {
-		siOpts = append(siOpts, informers.WithNamespace(opts.Namespace))
+// func watchObjects(opts Options) chan string {
+// 	reader := make(chan string)
+
+// 	var siOpts []informers.SharedInformerOption
+// 	if curr.SelectedRadio != FocusOnAllNamespace {
+// 		siOpts = append(siOpts, informers.WithNamespace(opts.Namespace))
+// 	}
+// 	f := informers.NewSharedInformerFactoryWithOptions(opts.ClientSet, 0, siOpts...)
+// 	defer runtime.HandleCrash()
+
+// 	go f.Start(opts.stopper)
+
+// 	// 寻找各个resource之间的关联，获取其id
+// 	// 找出存在status的resource，并标注哪些状态是成功状态
+// 	for _, obj := range opts.Objects {
+// 		// informer, err := f.ForResource(opts.Objects[0].Mapping.Resource)
+
+// 		if obj.Mapping.GroupVersionKind.Kind == "namespace" {
+
+// 		}
+
+// 	}
+
+// 	return reader
+// }
+
+func latestResourceVersion(opts *Options) error {
+	var latest, latestAllNamespace int
+
+	eventList, err := opts.ClientSet.CoreV1().Events(opts.Namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return err
 	}
-	f := informers.NewSharedInformerFactoryWithOptions(opts.ClientSet, 0, siOpts...)
-	informer := f.Core().V1().Events().Informer()
-	informer.GetIndexer()
-	defer runtime.HandleCrash()
+	latest, err = latestVersion(eventList.Items)
+	if err != nil {
+		return err
+	}
 
-	go f.Start(opts.stopper)
+	eventList, err = opts.ClientSet.CoreV1().Events("").List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	latestAllNamespace, err = latestVersion(eventList.Items)
+	if err != nil {
+		return err
+	}
 
-	// if !cache.WaitForCacheSync(opts.stopper, informer.HasSynced) {
-	// 	fmt.Print("Timed out waiting for caches to sync")
-	// }
-
-	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			defer func() {
-				if err := recover(); err != nil {
-					opts.TextView.AddText([]string{fmt.Sprintf("%v", err)})
-				}
-			}()
-			// TODO filter related objects
-			opts.eventsReader <- obj.(*corev1.Event)
-		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			defer func() {
-				if err := recover(); err != nil {
-					opts.TextView.AddText([]string{fmt.Sprintf("%v", err)})
-				}
-			}()
-			opts.eventsReader <- newObj.(*corev1.Event)
-		},
-		DeleteFunc: func(obj interface{}) {
-			defer func() {
-				if err := recover(); err != nil {
-					opts.TextView.AddText([]string{fmt.Sprintf("%v", err)})
-				}
-			}()
-			opts.eventsReader <- obj.(*corev1.Event)
-		},
-	})
+	opts.latestVersion = strconv.Itoa(latest)
+	opts.latestVersionAllNamespace = strconv.Itoa(latestAllNamespace)
+	return nil
 }
 
-func watchObjects(opts Options) chan string {
-	reader := make(chan string)
-
-	var siOpts []informers.SharedInformerOption
-	if curr.SelectedRadio != FocusOnAllNamespace {
-		siOpts = append(siOpts, informers.WithNamespace(opts.Namespace))
-	}
-	f := informers.NewSharedInformerFactoryWithOptions(opts.ClientSet, 0, siOpts...)
-	defer runtime.HandleCrash()
-
-	go f.Start(opts.stopper)
-
-	// 寻找各个resource之间的关联，获取其id
-	// 找出存在status的resource，并标注哪些状态是成功状态
-	for _, obj := range opts.Objects {
-		// informer, err := f.ForResource(opts.Objects[0].Mapping.Resource)
-
-		if obj.Mapping.GroupVersionKind.Kind == "namespace" {
-
+func latestVersion(events []corev1.Event) (int, error) {
+	latest := 0
+	for _, event := range events {
+		version, err := strconv.Atoi(event.ResourceVersion)
+		if err != nil {
+			return 0, err
 		}
-
+		if latest < version {
+			latest = version
+		}
 	}
-
-	return reader
+	return latest, nil
 }

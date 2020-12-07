@@ -184,8 +184,8 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericclioptions
 			cmdutil.CheckErr(e)
 			opt := kit.NewOptions(cmdNamespace, o.objects, clientSet)
 			kit.Intercept(kit.InterceptApply, opt)
-			o.Out = kit.NewUIWriter(opt, false)
-			o.ErrOut = kit.NewUIWriter(opt, true)
+			o.Out = kit.NewUIWriter(opt)
+			o.ErrOut = kit.NewUIErrorWriter(opt)
 
 			cmdutil.CheckErr(o.Complete(f, cmd))
 			cmdutil.CheckErr(validateArgs(cmd, args))

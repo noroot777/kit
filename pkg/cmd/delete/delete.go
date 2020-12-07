@@ -150,8 +150,8 @@ func NewCmdDelete(f cmdutil.Factory, streams genericclioptions.IOStreams) *cobra
 			cmdutil.CheckErr(e)
 			opt := kit.NewOptions(cmdNamespace, o.objects, clientSet)
 			kit.Intercept(kit.InterceptDelete, opt)
-			o.Out = kit.NewUIWriter(opt, false)
-			o.ErrOut = kit.NewUIWriter(opt, true)
+			o.Out = kit.NewUIWriter(opt)
+			o.ErrOut = kit.NewUIErrorWriter(opt)
 
 			cmdutil.CheckErr(o.Complete(f, args, cmd))
 			cmdutil.CheckErr(o.Validate())
