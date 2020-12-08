@@ -250,6 +250,11 @@ func createView(opts *Options) {
 				case *corev1.Event:
 					event := e.Object.(*corev1.Event)
 
+					// do not display the old version event
+					if event.ResourceVersion < curr.Version() {
+						continue
+					}
+
 					curr.AppendEvent(
 						[]string{
 							strconv.Itoa(len(curr.Events())/columnCount + 1),

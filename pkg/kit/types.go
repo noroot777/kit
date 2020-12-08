@@ -91,6 +91,17 @@ func (c *Current) SetVersion(version string) {
 
 }
 
+// Version return the resource version
+func (c *Current) Version() string {
+	switch c.selectedRadio {
+	case FocusOnInvolved, FocusOnCurrentNamespace:
+		return curr.resourceVersion
+	case FocusOnAllNamespace:
+		return curr.resourceVersionAllNamespace
+	}
+	return "0"
+}
+
 // InitVersions init the versions
 func (c *Current) InitVersions(resourceVersion string, resourceVersionAllNamespace string) {
 	c.resourceVersion = resourceVersion
