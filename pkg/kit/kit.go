@@ -1,13 +1,17 @@
 package kit
 
 // import (
+// 	"context"
 // 	"fmt"
 // 	"strconv"
 // 	"sync"
 
 // 	ui "github.com/noroot777/clui"
+
 // 	termbox "github.com/nsf/termbox-go"
+
 // 	corev1 "k8s.io/api/core/v1"
+// 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // 	"k8s.io/apimachinery/pkg/util/runtime"
 // 	"k8s.io/cli-runtime/pkg/resource"
 // 	"k8s.io/client-go/informers"
@@ -39,6 +43,8 @@ package kit
 // 	errorWriter  *UIWriter
 // 	stopper      chan struct{}
 // 	eventsReader chan *corev1.Event
+
+// 	latestVersion, latestVersionAllNamespace string
 // }
 
 // // NewOptions create new Options
@@ -58,6 +64,11 @@ package kit
 // 	o.stopper = make(chan struct{})
 // 	defer func() { o.stopper <- struct{}{} }()
 // 	curr = NewCurrent()
+// 	err := latestResourceVersion(o)
+// 	if err != nil {
+// 		fmt.Println(err)
+// 		return
+// 	}
 
 // 	if fn != nil {
 // 		fn(o)
@@ -318,9 +329,22 @@ package kit
 
 // func watchEvents(opts *Options) {
 // 	var siOpts []informers.SharedInformerOption
-// 	if curr.SelectedRadio != FocusOnAllNamespace {
-// 		siOpts = append(siOpts, informers.WithNamespace(opts.Namespace))
+// 	var ns, version string
+// 	switch curr.SelectedRadio {
+// 	case FocusOnInvolved, FocusOnCurrentNamespace:
+// 		ns = opts.Namespace
+// 		version = opts.latestVersion
+// 	case FocusOnAllNamespace:
+// 		ns = ""
+// 		version = opts.latestVersionAllNamespace
 // 	}
+// 	tweakListOptions := func(o *metav1.ListOptions) {
+// 		o.ResourceVersion = version
+// 		o.ResourceVersionMatch = metav1.ResourceVersionMatchNotOlderThan
+// 	}
+// 	siOpts = append(siOpts, informers.WithTweakListOptions(tweakListOptions))
+// 	siOpts = append(siOpts, informers.WithNamespace(ns))
+
 // 	f := informers.NewSharedInformerFactoryWithOptions(opts.ClientSet, 0, siOpts...)
 // 	informer := f.Core().V1().Events().Informer()
 // 	informer.GetIndexer()
@@ -385,4 +409,44 @@ package kit
 // 	}
 
 // 	return reader
+// }
+
+// func latestResourceVersion(opts *Options) error {
+// 	var latest, latestAllNamespace int
+
+// 	eventList, err := opts.ClientSet.CoreV1().Events(opts.Namespace).List(context.TODO(), metav1.ListOptions{})
+// 	if err != nil {
+// 		return err
+// 	}
+// 	latest, err = latestVersion(eventList.Items)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	eventList, err = opts.ClientSet.CoreV1().Events("").List(context.TODO(), metav1.ListOptions{})
+// 	if err != nil {
+// 		return err
+// 	}
+// 	latestAllNamespace, err = latestVersion(eventList.Items)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	opts.latestVersion = strconv.Itoa(latest)
+// 	opts.latestVersionAllNamespace = strconv.Itoa(latestAllNamespace)
+// 	return nil
+// }
+
+// func latestVersion(events []corev1.Event) (int, error) {
+// 	latest := 0
+// 	for _, event := range events {
+// 		version, err := strconv.Atoi(event.ResourceVersion)
+// 		if err != nil {
+// 			return 0, err
+// 		}
+// 		if latest < version {
+// 			latest = version
+// 		}
+// 	}
+// 	return latest, nil
 // }

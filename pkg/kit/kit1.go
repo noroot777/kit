@@ -18,8 +18,6 @@ import (
 var (
 	// Errors errors before intercept
 	Errors []error
-	// events displaying in Event Table
-	values []string
 	// values lock
 	mtx sync.RWMutex
 	// count of Event table(include the NO. column)
@@ -38,8 +36,6 @@ type Options struct {
 	writer      *UIWriter
 	errorWriter *UIWriter
 	watcher     watch.Interface
-
-	latestVersion, latestVersionAllNamespace string
 }
 
 // NewOptions create new Options
@@ -86,7 +82,7 @@ func Hold() {
 	ui.MainLoop()
 }
 
-func createView(opt *Options) {
+func createView(opts *Options) {
 	// **************
 	// * 1. draw ui *
 	// **************
@@ -102,7 +98,7 @@ func createView(opt *Options) {
 
 	// TextView show activities
 	txtActivity := ui.CreateTextView(frmLeft, ui.AutoSize, ui.AutoSize, 1)
-	opt.TextView = txtActivity
+	opts.TextView = txtActivity
 	txtActivity.SetShowScroll(false)
 	txtActivity.SetWordWrap(true)
 	for _, err := range Errors {
@@ -210,9 +206,9 @@ func createView(opt *Options) {
 		mtx.Lock()
 		defer mtx.Unlock()
 
-		txtEvent.SetText(text(values[selectedRow*columnCount : (selectedRow+1)*columnCount]))
+		txtEvent.SetText(text(curr.Events()[selectedRow*columnCount : (selectedRow+1)*columnCount]))
 		tabEvents.SetSelectedRow(selectedRow)
-		curr.VisitedSet.Add(selectedRow)
+		curr.visitedSet.Add(selectedRow)
 	})
 
 	radioGroup.OnSelectItem(func(c *ui.Radio) {
@@ -223,21 +219,19 @@ func createView(opt *Options) {
 				break
 			}
 		}
-		if int(curr.SelectedRadio) == index {
+		if int(curr.selectedRadio) == index {
 			return
 		}
-		tabEvents.SetRowCount(0)
 		switch index {
 		case 0:
-			changeRadioFocus(FocusOnInvolved, opt)
+			changeRadioFocus(FocusOnInvolved, opts, tabEvents)
 		case 1:
-			changeRadioFocus(FocusOnCurrentNamespace, opt)
+			changeRadioFocus(FocusOnCurrentNamespace, opts, tabEvents)
 		case 2:
-			changeRadioFocus(FocusOnAllNamespace, opt)
+			changeRadioFocus(FocusOnAllNamespace, opts, tabEvents)
 		case -1:
 			return
 		}
-		tabEvents.Draw()
 		txtEvent.SetText([]string{""})
 	})
 
@@ -247,7 +241,7 @@ func createView(opt *Options) {
 	go func() {
 		for {
 			select {
-			case e, ok := <-opt.watcher.ResultChan():
+			case e, ok := <-opts.watcher.ResultChan():
 				if !ok {
 					continue
 				}
@@ -255,22 +249,24 @@ func createView(opt *Options) {
 				switch e.Object.(type) {
 				case *corev1.Event:
 					event := e.Object.(*corev1.Event)
-					values = append(
+
+					curr.AppendEvent(
 						[]string{
-							strconv.Itoa(len(values)/columnCount + 1),
+							strconv.Itoa(len(curr.Events())/columnCount + 1),
 							event.LastTimestamp.Format("15:04:05"),
 							event.Type,
 							event.Reason,
 							event.InvolvedObject.Name,
-							event.Message},
-						values...)
-
-					tabEvents.SetRowCount(tabEvents.RowCount() + 1)
+							event.Message})
+					// move down
 					curr.MoveEach()
+					// set the latest resource version
+					curr.SetVersion(event.ResourceVersion)
+
+					txtEvent.SetText(text(curr.Events()[:columnCount]))
+					tabEvents.SetRowCount(len(curr.Events()) / columnCount)
 					// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
 					ui.PutEvent(ui.Event{Type: ui.EventRedraw})
-
-					txtEvent.SetText(text(values[:columnCount]))
 				}
 
 				mtx.Unlock()
@@ -292,13 +288,14 @@ func text(v []string) []string {
 	return t
 }
 
-func changeRadioFocus(f FocusOn, opts *Options) {
-	mtx.Lock()
-	defer mtx.Unlock()
-
-	values = values[0:0]
+func changeRadioFocus(f FocusOn, opts *Options, tabEvents *ui.TableView) {
+	tabEvents.SetRowCount(0)
+	tabEvents.Draw()
 	opts.watcher.Stop()
+
 	curr.SetSelectedRadio(f)
+	tabEvents.SetRowCount(len(curr.Events()) / columnCount)
+	tabEvents.Draw()
 
 	watchEvents(opts)
 }
@@ -307,10 +304,10 @@ func drawCell(info *ui.ColumnDrawInfo) {
 	mtx.Lock()
 	defer mtx.Unlock()
 
-	if len(values) > 0 {
-		info.Text = values[info.Row*columnCount+info.Col]
+	if len(curr.Events()) > 0 {
+		info.Text = curr.Events()[info.Row*columnCount+info.Col]
 		// set visited row's bg color
-		if curr.VisitedSet.Contains(info.Row) {
+		if curr.visitedSet.Contains(info.Row) {
 			if info.RowSelected {
 				info.Fg = ui.ColorWhiteBold
 			} else {
@@ -322,49 +319,25 @@ func drawCell(info *ui.ColumnDrawInfo) {
 	}
 }
 
+// can not use informer, bcz `410 Gone` happened
 func watchEvents(opts *Options) {
 	var ns string = ""
 	var version = ""
-	switch curr.SelectedRadio {
+	switch curr.selectedRadio {
 	case FocusOnInvolved, FocusOnCurrentNamespace:
 		ns = opts.Namespace
-		version = opts.latestVersion
+		version = curr.resourceVersion
 	case FocusOnAllNamespace:
 		ns = ""
-		version = opts.latestVersionAllNamespace
+		version = curr.resourceVersionAllNamespace
 	}
-	watcher, err := opts.ClientSet.CoreV1().Events(ns).Watch(context.TODO(), metav1.ListOptions{ResourceVersion: version})
+	listOpt := metav1.ListOptions{ResourceVersion: version, ResourceVersionMatch: metav1.ResourceVersionMatchNotOlderThan}
+	watcher, err := opts.ClientSet.CoreV1().Events(ns).Watch(context.TODO(), listOpt)
 	if err != nil {
 		opts.errorWriter.Write([]byte(err.Error()))
 	}
 	opts.watcher = watcher
 }
-
-// func watchObjects(opts Options) chan string {
-// 	reader := make(chan string)
-
-// 	var siOpts []informers.SharedInformerOption
-// 	if curr.SelectedRadio != FocusOnAllNamespace {
-// 		siOpts = append(siOpts, informers.WithNamespace(opts.Namespace))
-// 	}
-// 	f := informers.NewSharedInformerFactoryWithOptions(opts.ClientSet, 0, siOpts...)
-// 	defer runtime.HandleCrash()
-
-// 	go f.Start(opts.stopper)
-
-// 	// 寻找各个resource之间的关联，获取其id
-// 	// 找出存在status的resource，并标注哪些状态是成功状态
-// 	for _, obj := range opts.Objects {
-// 		// informer, err := f.ForResource(opts.Objects[0].Mapping.Resource)
-
-// 		if obj.Mapping.GroupVersionKind.Kind == "namespace" {
-
-// 		}
-
-// 	}
-
-// 	return reader
-// }
 
 func latestResourceVersion(opts *Options) error {
 	var latest, latestAllNamespace int
@@ -387,8 +360,7 @@ func latestResourceVersion(opts *Options) error {
 		return err
 	}
 
-	opts.latestVersion = strconv.Itoa(latest)
-	opts.latestVersionAllNamespace = strconv.Itoa(latestAllNamespace)
+	curr.InitVersions(strconv.Itoa(latest), strconv.Itoa(latestAllNamespace))
 	return nil
 }
 
