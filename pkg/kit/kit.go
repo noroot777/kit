@@ -6,6 +6,7 @@ import (
 	"io"
 	"strconv"
 	"sync"
+	"time"
 
 	ui "github.com/noroot777/clui"
 	termbox "github.com/nsf/termbox-go"
@@ -34,6 +35,8 @@ type Options struct {
 	ClientSet kubernetes.Interface
 	TextView  *ui.TextView
 
+	involvedObjects map[string]*resource.Info
+
 	writer      *UIWriter
 	errorWriter *UIWriter
 	watcher     watch.Interface
@@ -41,11 +44,15 @@ type Options struct {
 
 // NewOptions create new Options
 func NewOptions(namespace string, objects []*resource.Info, clientSet *kubernetes.Clientset) *Options {
-	return &Options{
+	opts := &Options{
 		Namespace: namespace,
 		Objects:   objects,
 		ClientSet: clientSet,
 	}
+	for _, obj := range objects {
+		opts.involvedObjects[obj.Name] = obj
+	}
+	return opts
 }
 
 // Intercept intercept the kubectl command
@@ -248,6 +255,7 @@ func createView(opts *Options) {
 	go func() {
 		for {
 			if opts.watcher == nil {
+				time.Sleep(100 * time.Millisecond)
 				continue
 			}
 			select {
@@ -282,6 +290,8 @@ func createView(opts *Options) {
 					tabEvents.SetRowCount(len(curr.Events()) / columnCount)
 					// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
 					ui.PutEvent(ui.Event{Type: ui.EventRedraw})
+				default:
+					continue
 				}
 
 				mtx.Unlock()
