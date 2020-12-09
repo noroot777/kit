@@ -183,9 +183,7 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericclioptions
 			cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
 			cmdutil.CheckErr(e)
 			opt := kit.NewOptions(cmdNamespace, o.objects, clientSet)
-			kit.Intercept(kit.InterceptApply, opt)
-			o.Out = kit.NewUIWriter(opt)
-			o.ErrOut = kit.NewUIErrorWriter(opt)
+			o.Out, o.ErrOut = kit.Intercept(kit.InterceptApply, opt)
 
 			cmdutil.CheckErr(o.Complete(f, cmd))
 			cmdutil.CheckErr(validateArgs(cmd, args))

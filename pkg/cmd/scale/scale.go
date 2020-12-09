@@ -122,9 +122,7 @@ func NewCmdScale(f cmdutil.Factory, ioStreams genericclioptions.IOStreams) *cobr
 			cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
 			cmdutil.CheckErr(e)
 			opt := kit.NewOptions(cmdNamespace, nil, clientSet)
-			kit.Intercept(nil, opt)
-			o.Out = kit.NewUIWriter(opt)
-			o.ErrOut = kit.NewUIErrorWriter(opt)
+			o.Out, o.ErrOut = kit.Intercept(nil, opt)
 
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Validate(cmd))

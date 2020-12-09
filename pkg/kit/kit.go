@@ -1,452 +1,388 @@
 package kit
 
-// import (
-// 	"context"
-// 	"fmt"
-// 	"strconv"
-// 	"sync"
+import (
+	"context"
+	"fmt"
+	"io"
+	"strconv"
+	"sync"
 
-// 	ui "github.com/noroot777/clui"
+	ui "github.com/noroot777/clui"
+	termbox "github.com/nsf/termbox-go"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/cli-runtime/pkg/resource"
+	"k8s.io/client-go/kubernetes"
+)
 
-// 	termbox "github.com/nsf/termbox-go"
+var (
+	// Errors errors before intercept
+	Errors []error
+	// values lock
+	mtx sync.RWMutex
+	// count of Event table(include the NO. column)
+	columnCount = 6
+	// to keep current status
+	curr *Current
+)
 
-// 	corev1 "k8s.io/api/core/v1"
-// 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-// 	"k8s.io/apimachinery/pkg/util/runtime"
-// 	"k8s.io/cli-runtime/pkg/resource"
-// 	"k8s.io/client-go/informers"
-// 	"k8s.io/client-go/kubernetes"
-// 	"k8s.io/client-go/tools/cache"
-// )
+// Options TODO
+type Options struct {
+	Namespace string // TODO apply -f, there are multiple namespaces
+	Objects   []*resource.Info
+	ClientSet kubernetes.Interface
+	TextView  *ui.TextView
 
-// var (
-// 	// Errors errors before intercept
-// 	Errors []error
-// 	// events displaying in Event Table
-// 	values []string
-// 	// values lock
-// 	mtx sync.RWMutex
-// 	// count of Event table(include the NO. column)
-// 	columnCount = 6
-// 	// to keep current status
-// 	curr *Current
-// )
+	writer      *UIWriter
+	errorWriter *UIWriter
+	watcher     watch.Interface
+}
 
-// // Options TODO
-// type Options struct {
-// 	Namespace string // TODO apply -f, there are multiple namespaces
-// 	Objects   []*resource.Info
-// 	ClientSet kubernetes.Interface
-// 	TextView  *ui.TextView
+// NewOptions create new Options
+func NewOptions(namespace string, objects []*resource.Info, clientSet *kubernetes.Clientset) *Options {
+	return &Options{
+		Namespace: namespace,
+		Objects:   objects,
+		ClientSet: clientSet,
+	}
+}
 
-// 	writer       *UIWriter
-// 	errorWriter  *UIWriter
-// 	stopper      chan struct{}
-// 	eventsReader chan *corev1.Event
+// Intercept intercept the kubectl command
+func Intercept(fn InterceptFunc, opts *Options) (out io.Writer, errorOut io.Writer) {
+	curr = NewCurrent(opts.Namespace)
+	err := latestResourceVersion(opts)
+	if err != nil {
+		fmt.Println(err)
+		return nil, nil
+	}
 
-// 	latestVersion, latestVersionAllNamespace string
-// }
+	if fn != nil {
+		fn(opts)
+	}
 
-// // NewOptions create new Options
-// func NewOptions(namespace string, objects []*resource.Info, clientSet *kubernetes.Clientset) *Options {
-// 	return &Options{
-// 		Namespace: namespace,
-// 		Objects:   objects,
-// 		ClientSet: clientSet,
+	drawUI(opts)
 
-// 		stopper:      make(chan struct{}),
-// 		eventsReader: make(chan *corev1.Event, 100),
-// 	}
-// }
+	out = NewUIWriter(opts)
+	errorOut = NewUIErrorWriter(opts)
 
-// // Intercept intercept the command exec
-// func Intercept(fn InterceptFunc, o *Options) {
-// 	o.stopper = make(chan struct{})
-// 	defer func() { o.stopper <- struct{}{} }()
-// 	curr = NewCurrent()
-// 	err := latestResourceVersion(o)
-// 	if err != nil {
-// 		fmt.Println(err)
-// 		return
-// 	}
+	watchEvents(opts)
 
-// 	if fn != nil {
-// 		fn(o)
-// 	}
+	return
+}
 
-// 	drawUI(o)
-// }
+// drawUI draw a interactive term ui
+func drawUI(opts *Options) {
+	ui.InitLibrary()
+	ui.SetThemePath(".")
+	ui.SetCurrentTheme("ui")
 
-// // drawUI draw a interactive term ui
-// func drawUI(opt *Options) {
-// 	ui.InitLibrary()
-// 	ui.SetThemePath(".")
-// 	ui.SetCurrentTheme("ui")
+	createView(opts)
 
-// 	watchEvents(opt)
-// 	createView(opt)
+	ui.RefreshScreen()
+	// termbox.Flush()
+}
 
-// 	ui.RefreshScreen()
-// 	// termbox.Flush()
-// }
+// Hold show term ui
+func Hold() {
+	defer ui.DeinitLibrary()
+	ui.MainLoop()
+}
 
-// // Hold show term ui
-// func Hold() {
-// 	defer ui.DeinitLibrary()
-// 	ui.MainLoop()
-// }
+func createView(opts *Options) {
+	// **************
+	// * 1. draw ui *
+	// **************
+	w, h := termbox.Size()
+	view := ui.AddWindow(0, 0, w, h, " Kubectl Interactive Tool ")
+	view.SetBorder(ui.BorderThin)
+	view.SetPack(ui.Vertical)
 
-// // TODO set cursor focus
-// func createView(opt *Options) {
-// 	// **************
-// 	// * 1. draw ui *
-// 	// **************
-// 	w, h := termbox.Size()
-// 	view := ui.AddWindow(0, 0, w, h, " Kubectl Interactive Tool ")
-// 	view.SetBorder(ui.BorderThin)
-// 	view.SetPack(ui.Vertical)
+	frmExTips := ui.CreateFrame(view, ui.AutoSize, ui.AutoSize, ui.BorderNone, ui.AutoSize)
+	// frame include txtActivity
+	frmLeft := ui.CreateFrame(frmExTips, 50, ui.AutoSize, ui.BorderThin, ui.Fixed)
+	frmLeft.SetTitle(" Activities ")
 
-// 	frmExTips := ui.CreateFrame(view, ui.AutoSize, ui.AutoSize, ui.BorderNone, ui.AutoSize)
-// 	// frame include txtActivity
-// 	frmLeft := ui.CreateFrame(frmExTips, 50, ui.AutoSize, ui.BorderThin, ui.Fixed)
-// 	frmLeft.SetTitle(" Activities ")
+	// TextView show activities
+	txtActivity := ui.CreateTextView(frmLeft, ui.AutoSize, ui.AutoSize, 1)
+	opts.TextView = txtActivity
+	txtActivity.SetShowScroll(false)
+	txtActivity.SetWordWrap(true)
+	for _, err := range Errors {
+		txtActivity.AddText([]string{"⚠️ " + err.Error()})
+	}
+	// txtActivity.AddText([]string{" ⚠️   Namespace created!"})
+	// txtActivity.AddText([]string{" ✅   Namespace created!"})
+	// txtActivity.AddText([]string{" ✖️   Namespace created!"})
 
-// 	// TextView show activities
-// 	txtActivity := ui.CreateTextView(frmLeft, ui.AutoSize, ui.AutoSize, 1)
-// 	opt.TextView = txtActivity
-// 	txtActivity.SetShowScroll(false)
-// 	txtActivity.SetWordWrap(true)
-// 	for _, err := range Errors {
-// 		txtActivity.AddText([]string{"⚠️ " + err.Error()})
-// 	}
-// 	// txtActivity.AddText([]string{" ⚠️   Namespace created!"})
-// 	// txtActivity.AddText([]string{" ✅   Namespace created!"})
-// 	// txtActivity.AddText([]string{" ✖️   Namespace created!"})
+	// frame include frmRadio and frmEvents
+	frmRight := ui.CreateFrame(frmExTips, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
+	frmRight.SetPack(ui.Vertical)
+	frmRight.SetPaddings(1, 1)
+	frmRight.SetTitle(" Kubernetes Events ")
 
-// 	// frame include frmRadio and frmEvents
-// 	frmRight := ui.CreateFrame(frmExTips, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
-// 	frmRight.SetPack(ui.Vertical)
-// 	frmRight.SetPaddings(1, 1)
-// 	frmRight.SetTitle(" Kubernetes Events ")
+	// frame include radioGroup
+	frmRadio := ui.CreateFrame(frmRight, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
+	frmRadio.SetTitle(" Choose Events Scope ")
+	frmRadio.SetPack(ui.Horizontal)
+	frmRadio.SetPaddings(5, 1)
+	frmRadio.SetAlign(ui.AlignRight)
+	// radio group to select related namespace or objects
+	radioGroup := ui.CreateRadioGroup()
+	radioCR := ui.CreateRadio(frmRadio, ui.AutoSize, "Involved objects", 1)
+	radioCR.SetSelected(false)
+	radioCR.SetActive(false)
+	radioGroup.AddItem(radioCR)
+	radioCN := ui.CreateRadio(frmRadio, ui.AutoSize, "Current namespace", 1)
+	radioCN.SetSelected(true)
+	radioCN.SetActive(false)
+	radioGroup.AddItem(radioCN)
+	radioAN := ui.CreateRadio(frmRadio, ui.AutoSize, "All namespaces", 1)
+	radioAN.SetSelected(false)
+	radioAN.SetActive(false)
+	radioGroup.AddItem(radioAN)
 
-// 	// frame include radioGroup
-// 	frmRadio := ui.CreateFrame(frmRight, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
-// 	frmRadio.SetTitle(" Choose Events Scope ")
-// 	frmRadio.SetPack(ui.Horizontal)
-// 	frmRadio.SetPaddings(5, 1)
-// 	frmRadio.SetAlign(ui.AlignRight)
-// 	// radio group to select related namespace or objects
-// 	radioGroup := ui.CreateRadioGroup()
-// 	radioCR := ui.CreateRadio(frmRadio, ui.AutoSize, "Involved objects", 1)
-// 	radioCR.SetSelected(false)
-// 	radioCR.SetActive(false)
-// 	radioGroup.AddItem(radioCR)
-// 	radioCN := ui.CreateRadio(frmRadio, ui.AutoSize, "Current namespace", 1)
-// 	radioCN.SetSelected(true)
-// 	radioCN.SetActive(false)
-// 	radioGroup.AddItem(radioCN)
-// 	radioAN := ui.CreateRadio(frmRadio, ui.AutoSize, "All namespaces", 1)
-// 	radioAN.SetSelected(false)
-// 	radioAN.SetActive(false)
-// 	radioGroup.AddItem(radioAN)
+	// frame include tabEvents
+	frmEvents := ui.CreateFrame(frmRight, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
+	frmEvents.SetTitle(" Events List ")
+	frmEvents.ResizeChildren()
+	// TableView of events
+	tabEvents := ui.CreateTableView(frmEvents, ui.AutoSize, ui.AutoSize, 1)
+	tabEvents.SetTitle(" Event List ")
+	cols := []ui.Column{
+		{Title: "#", Width: 4, Alignment: ui.AlignLeft},
+		{Title: "LAST_SEEN", Width: 10, Alignment: ui.AlignLeft},
+		{Title: "TYPE", Width: 12, Alignment: ui.AlignLeft},
+		{Title: "REASON", Width: 20, Alignment: ui.AlignLeft},
+		{Title: "OBJECT", Width: 30, Alignment: ui.AlignLeft},
+		{Title: "MESSAGE", Width: 100, Alignment: ui.AlignLeft},
+	}
+	tabEvents.SetColumns(cols)
+	tabEvents.SetRowCount(0)
+	tabEvents.SetShowScroll(false)
+	tabEvents.SetFullRowSelect(true)
+	tabEvents.SetShowLines(false)
+	tabEvents.SetShowRowNumber(false)
 
-// 	// frame include tabEvents
-// 	frmEvents := ui.CreateFrame(frmRight, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
-// 	frmEvents.SetTitle(" Events List ")
-// 	frmEvents.ResizeChildren()
-// 	// TableView of events
-// 	tabEvents := ui.CreateTableView(frmEvents, ui.AutoSize, ui.AutoSize, 1)
-// 	tabEvents.SetTitle(" Event List ")
-// 	cols := []ui.Column{
-// 		{Title: "#", Width: 4, Alignment: ui.AlignLeft},
-// 		{Title: "LAST_SEEN", Width: 10, Alignment: ui.AlignLeft},
-// 		{Title: "TYPE", Width: 12, Alignment: ui.AlignLeft},
-// 		{Title: "REASON", Width: 20, Alignment: ui.AlignLeft},
-// 		{Title: "OBJECT", Width: 30, Alignment: ui.AlignLeft},
-// 		{Title: "MESSAGE", Width: 100, Alignment: ui.AlignLeft},
-// 	}
-// 	tabEvents.SetColumns(cols)
-// 	tabEvents.SetRowCount(0)
-// 	tabEvents.SetShowScroll(false)
-// 	tabEvents.SetFullRowSelect(true)
-// 	tabEvents.SetShowLines(false)
-// 	tabEvents.SetShowRowNumber(false)
+	// frame include txtEvent
+	frmRightBottom := ui.CreateFrame(frmRight, ui.AutoSize, 10, ui.BorderThin, ui.Fixed)
+	frmRightBottom.SetTitle(" Events Detail ")
+	frmRightBottom.SetPack(ui.Vertical)
+	// TextView show event detail
+	txtEvent := ui.CreateTextView(frmRightBottom, ui.AutoSize, ui.AutoSize, 1)
+	txtEvent.SetShowScroll(false)
+	txtEvent.SetWordWrap(true)
+	txtEvent.SetActive(false)
 
-// 	// frame include txtEvent
-// 	frmRightBottom := ui.CreateFrame(frmRight, ui.AutoSize, 10, ui.BorderThin, ui.Fixed)
-// 	frmRightBottom.SetTitle(" Events Detail ")
-// 	frmRightBottom.SetPack(ui.Vertical)
-// 	// TextView show event detail
-// 	txtEvent := ui.CreateTextView(frmRightBottom, ui.AutoSize, ui.AutoSize, 1)
-// 	txtEvent.SetShowScroll(false)
-// 	txtEvent.SetWordWrap(true)
-// 	txtEvent.SetActive(false)
+	frmTips := ui.CreateFrame(view, ui.AutoSize, ui.AutoSize, ui.BorderNone, ui.Fixed)
+	txtTips := ui.CreateTextView(frmTips, ui.AutoSize, 1, 1)
+	txtTips.SetText([]string{" * ctrl+e: change interactive mode - text selection or mouse;   ctrl+q: exit;   esc: exit;   or click the top right corner to exit;"})
+	txtTips.SetTextColor(termbox.ColorDarkGray | termbox.AttrBold)
 
-// 	frmTips := ui.CreateFrame(view, ui.AutoSize, ui.AutoSize, ui.BorderNone, ui.Fixed)
-// 	txtTips := ui.CreateTextView(frmTips, ui.AutoSize, 1, 1)
-// 	txtTips.SetText([]string{" * ctrl+e: change interactive mode - text selection or mouse;   ctrl+q: exit;   esc: exit;   or click the top right corner to exit;"})
-// 	txtTips.SetTextColor(termbox.ColorDarkGray | termbox.AttrBold)
+	// ********************************
+	// * 2. handlers of ui components *
+	// ********************************
 
-// 	// ********************************
-// 	// * 2. handlers of ui components *
-// 	// ********************************
+	// Key press handler
+	//   1. press ctrl+e to change the input mode
+	//      termbox.InputEsc | termbox.InputMouse: interactive mode, mouse enable, text selection disable
+	//      termbox.InputEsc: traditional mode, mouse disable, text selection enable
+	//   2. press ctl+q to exit ui
+	inputEscMode := false
+	view.OnKeyDown(func(e ui.Event, data interface{}) bool {
+		switch e.Key {
+		case termbox.KeyCtrlE:
+			if inputEscMode {
+				termbox.SetInputMode(termbox.InputEsc | termbox.InputMouse)
+				ui.Reset()
+				inputEscMode = false
+			} else {
+				termbox.SetInputMode(termbox.InputEsc)
+				ui.Reset()
+				inputEscMode = true
+			}
+		case termbox.KeyCtrlQ, termbox.KeyEsc:
+			ui.PutEvent(ui.Event{Type: ui.EventCloseWindow})
+		}
+		return true
+	}, inputEscMode)
 
-// 	// Key press handler
-// 	//   1. press ctrl+e to change the input mode
-// 	//      termbox.InputEsc | termbox.InputMouse: interactive mode, mouse enable, text selection disable
-// 	//      termbox.InputEsc: traditional mode, mouse disable, text selection enable
-// 	//   2. press ctl+q to exit ui
-// 	inputEscMode := false
-// 	view.OnKeyDown(func(e ui.Event, data interface{}) bool {
-// 		switch e.Key {
-// 		case termbox.KeyCtrlE:
-// 			if inputEscMode {
-// 				termbox.SetInputMode(termbox.InputEsc | termbox.InputMouse)
-// 				ui.Reset()
-// 				inputEscMode = false
-// 			} else {
-// 				termbox.SetInputMode(termbox.InputEsc)
-// 				ui.Reset()
-// 				inputEscMode = true
-// 			}
-// 		case termbox.KeyCtrlQ, termbox.KeyEsc:
-// 			ui.PutEvent(ui.Event{Type: ui.EventCloseWindow})
-// 		}
-// 		return true
-// 	}, inputEscMode)
+	tabEvents.OnDrawCell(drawCell)
 
-// 	tabEvents.OnDrawCell(drawCell)
+	tabEvents.OnSelectCell(func(selectedCol int, selectedRow int) {
+		mtx.Lock()
+		defer mtx.Unlock()
 
-// 	tabEvents.OnSelectCell(func(selectedCol int, selectedRow int) {
-// 		mtx.Lock()
-// 		defer mtx.Unlock()
+		txtEvent.SetText(text(curr.Events()[selectedRow*columnCount : (selectedRow+1)*columnCount]))
+		tabEvents.SetSelectedRow(selectedRow)
+		curr.VisitedSet().Add(selectedRow)
+	})
 
-// 		txtEvent.SetText(text(values[selectedRow*columnCount : (selectedRow+1)*columnCount]))
-// 		tabEvents.SetSelectedRow(selectedRow)
-// 		curr.VisitedSet.Add(selectedRow)
-// 	})
+	radioGroup.OnSelectItem(func(c *ui.Radio) {
+		var index = -1
+		for i, item := range c.Parent().Children() {
+			if item == c {
+				index = i
+				break
+			}
+		}
+		if int(curr.SelectedRadio()) == index {
+			return
+		}
+		switch index {
+		case 0:
+			changeRadioFocus(FocusOnInvolved, opts, tabEvents)
+		case 1:
+			changeRadioFocus(FocusOnCurrentNamespace, opts, tabEvents)
+		case 2:
+			changeRadioFocus(FocusOnAllNamespace, opts, tabEvents)
+		case -1:
+			return
+		}
+		txtEvent.SetText([]string{""})
+	})
 
-// 	radioGroup.OnSelectItem(func(c *ui.Radio) {
-// 		var index = -1
-// 		for i, item := range c.Parent().Children() {
-// 			if item == c {
-// 				index = i
-// 				break
-// 			}
-// 		}
-// 		if int(curr.SelectedRadio) == index {
-// 			return
-// 		}
-// 		tabEvents.SetRowCount(0)
-// 		switch index {
-// 		case 0:
-// 			changeRadioFocus(FocusOnInvolved, opt)
-// 		case 1:
-// 			changeRadioFocus(FocusOnCurrentNamespace, opt)
-// 		case 2:
-// 			changeRadioFocus(FocusOnAllNamespace, opt)
-// 		case -1:
-// 			return
-// 		}
-// 		tabEvents.Draw()
-// 		txtEvent.SetText([]string{""})
-// 	})
+	// ******************************************************
+	// * 3. catch the events from k8s and show in tabEvents *
+	// ******************************************************
+	go func() {
+		for {
+			if opts.watcher == nil {
+				continue
+			}
+			select {
+			case e, ok := <-opts.watcher.ResultChan():
+				if !ok {
+					continue
+				}
+				mtx.Lock()
+				switch e.Object.(type) {
+				case *corev1.Event:
+					event := e.Object.(*corev1.Event)
 
-// 	// ******************************************************
-// 	// * 3. catch the events from k8s and show in tabEvents *
-// 	// ******************************************************
-// 	go func() {
-// 		for {
-// 			select {
-// 			case event, _ := <-opt.eventsReader:
-// 				mtx.Lock()
+					// do not display the old version event
+					if event.ResourceVersion < curr.Version() {
+						continue
+					}
 
-// 				values = append(
-// 					[]string{
-// 						strconv.Itoa(len(values)/columnCount + 1),
-// 						event.LastTimestamp.Format("15:04:05"),
-// 						event.Type,
-// 						event.Reason,
-// 						event.InvolvedObject.Name,
-// 						event.Message},
-// 					values...)
+					curr.AppendEvent(
+						[]string{
+							strconv.Itoa(len(curr.Events())/columnCount + 1),
+							event.LastTimestamp.Format("15:04:05"),
+							event.Type,
+							event.Reason,
+							event.InvolvedObject.Name,
+							event.Message})
+					// move down
+					curr.MoveEach()
+					// set the latest resource version
+					curr.SetVersion(event.ResourceVersion)
 
-// 				tabEvents.SetRowCount(tabEvents.RowCount() + 1)
-// 				curr.MoveEach()
-// 				// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
-// 				ui.PutEvent(ui.Event{Type: ui.EventRedraw})
+					txtEvent.SetText(text(curr.Events()[:columnCount]))
+					tabEvents.SetRowCount(len(curr.Events()) / columnCount)
+					// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
+					ui.PutEvent(ui.Event{Type: ui.EventRedraw})
+				}
 
-// 				txtEvent.SetText(text(values[:columnCount]))
+				mtx.Unlock()
+			}
+		}
+	}()
 
-// 				mtx.Unlock()
-// 			}
-// 		}
-// 	}()
+}
 
-// }
+func text(v []string) []string {
+	var t = []string{
+		fmt.Sprint("#        : ", v[0]),
+		fmt.Sprint("LAST_SEEN: " + v[1]),
+		fmt.Sprint("TYPE     : " + v[2]),
+		fmt.Sprint("REASON   : " + v[3]),
+		fmt.Sprint("OBJECT   : " + v[4]),
+		fmt.Sprint("MESSAGE  : " + v[5]),
+	}
+	return t
+}
 
-// func text(v []string) []string {
-// 	var t = []string{
-// 		fmt.Sprint("#        : ", v[0]),
-// 		fmt.Sprint("LAST_SEEN: " + v[1]),
-// 		fmt.Sprint("TYPE     : " + v[2]),
-// 		fmt.Sprint("REASON   : " + v[3]),
-// 		fmt.Sprint("OBJECT   : " + v[4]),
-// 		fmt.Sprint("MESSAGE  : " + v[5]),
-// 	}
-// 	return t
-// }
+func changeRadioFocus(f FocusOn, opts *Options, tabEvents *ui.TableView) {
+	tabEvents.SetRowCount(0)
+	tabEvents.Draw()
+	opts.watcher.Stop()
 
-// func changeRadioFocus(f FocusOn, opts *Options) {
-// 	mtx.Lock()
-// 	defer mtx.Unlock()
+	curr.SetSelectedRadio(f)
+	curr.SetNamespace(opts.Namespace)
+	tabEvents.SetRowCount(len(curr.Events()) / columnCount)
+	tabEvents.Draw()
 
-// 	values = values[0:0]
-// 	opts.stopper <- struct{}{}
-// 	curr.SetSelectedRadio(f)
+	watchEvents(opts)
+}
 
-// 	watchEvents(opts)
-// }
+func drawCell(info *ui.ColumnDrawInfo) {
+	mtx.Lock()
+	defer mtx.Unlock()
 
-// func drawCell(info *ui.ColumnDrawInfo) {
-// 	mtx.Lock()
-// 	defer mtx.Unlock()
+	if len(curr.Events()) > 0 {
+		info.Text = curr.Events()[info.Row*columnCount+info.Col]
+		// set visited row's bg color
+		if curr.VisitedSet().Contains(info.Row) {
+			if info.RowSelected {
+				info.Fg = ui.ColorWhiteBold
+			} else {
+				info.Fg = ui.ColorWhite
+			}
+		} else {
+			info.Fg = ui.ColorYellowBold
+		}
+	}
+}
 
-// 	if len(values) > 0 {
-// 		info.Text = values[info.Row*columnCount+info.Col]
-// 		// set visited row's bg color
-// 		if curr.VisitedSet.Contains(info.Row) {
-// 			if info.RowSelected {
-// 				info.Fg = ui.ColorWhiteBold
-// 			} else {
-// 				info.Fg = ui.ColorWhite
-// 			}
-// 		} else {
-// 			info.Fg = ui.ColorYellowBold
-// 		}
-// 	}
-// }
+// can not use informer, bcz `410 Gone` happened
+func watchEvents(opts *Options) {
+	version := curr.Version()
+	ns := curr.Namespace()
+	opts.writer.Write([]byte("ns: " + ns))
+	listOpt := metav1.ListOptions{ResourceVersion: version, ResourceVersionMatch: metav1.ResourceVersionMatchNotOlderThan}
+	watcher, err := opts.ClientSet.CoreV1().Events(ns).Watch(context.TODO(), listOpt)
+	if err != nil {
+		opts.errorWriter.Write([]byte(err.Error()))
+	}
+	opts.watcher = watcher
+}
 
-// func watchEvents(opts *Options) {
-// 	var siOpts []informers.SharedInformerOption
-// 	var ns, version string
-// 	switch curr.SelectedRadio {
-// 	case FocusOnInvolved, FocusOnCurrentNamespace:
-// 		ns = opts.Namespace
-// 		version = opts.latestVersion
-// 	case FocusOnAllNamespace:
-// 		ns = ""
-// 		version = opts.latestVersionAllNamespace
-// 	}
-// 	tweakListOptions := func(o *metav1.ListOptions) {
-// 		o.ResourceVersion = version
-// 		o.ResourceVersionMatch = metav1.ResourceVersionMatchNotOlderThan
-// 	}
-// 	siOpts = append(siOpts, informers.WithTweakListOptions(tweakListOptions))
-// 	siOpts = append(siOpts, informers.WithNamespace(ns))
+func latestResourceVersion(opts *Options) error {
+	var latest, latestAllNamespace int
 
-// 	f := informers.NewSharedInformerFactoryWithOptions(opts.ClientSet, 0, siOpts...)
-// 	informer := f.Core().V1().Events().Informer()
-// 	informer.GetIndexer()
-// 	defer runtime.HandleCrash()
+	eventList, err := opts.ClientSet.CoreV1().Events(opts.Namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	latest, err = latestVersion(eventList.Items)
+	if err != nil {
+		return err
+	}
 
-// 	go f.Start(opts.stopper)
+	eventList, err = opts.ClientSet.CoreV1().Events("").List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	latestAllNamespace, err = latestVersion(eventList.Items)
+	if err != nil {
+		return err
+	}
 
-// 	// if !cache.WaitForCacheSync(opts.stopper, informer.HasSynced) {
-// 	// 	fmt.Print("Timed out waiting for caches to sync")
-// 	// }
+	curr.InitVersions(strconv.Itoa(latest), strconv.Itoa(latestAllNamespace))
+	return nil
+}
 
-// 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-// 		AddFunc: func(obj interface{}) {
-// 			defer func() {
-// 				if err := recover(); err != nil {
-// 					opts.TextView.AddText([]string{fmt.Sprintf("%v", err)})
-// 				}
-// 			}()
-// 			// TODO filter related objects
-// 			opts.eventsReader <- obj.(*corev1.Event)
-// 		},
-// 		UpdateFunc: func(oldObj, newObj interface{}) {
-// 			defer func() {
-// 				if err := recover(); err != nil {
-// 					opts.TextView.AddText([]string{fmt.Sprintf("%v", err)})
-// 				}
-// 			}()
-// 			opts.eventsReader <- newObj.(*corev1.Event)
-// 		},
-// 		DeleteFunc: func(obj interface{}) {
-// 			defer func() {
-// 				if err := recover(); err != nil {
-// 					opts.TextView.AddText([]string{fmt.Sprintf("%v", err)})
-// 				}
-// 			}()
-// 			opts.eventsReader <- obj.(*corev1.Event)
-// 		},
-// 	})
-// }
-
-// func watchObjects(opts Options) chan string {
-// 	reader := make(chan string)
-
-// 	var siOpts []informers.SharedInformerOption
-// 	if curr.SelectedRadio != FocusOnAllNamespace {
-// 		siOpts = append(siOpts, informers.WithNamespace(opts.Namespace))
-// 	}
-// 	f := informers.NewSharedInformerFactoryWithOptions(opts.ClientSet, 0, siOpts...)
-// 	defer runtime.HandleCrash()
-
-// 	go f.Start(opts.stopper)
-
-// 	// 寻找各个resource之间的关联，获取其id
-// 	// 找出存在status的resource，并标注哪些状态是成功状态
-// 	for _, obj := range opts.Objects {
-// 		// informer, err := f.ForResource(opts.Objects[0].Mapping.Resource)
-
-// 		if obj.Mapping.GroupVersionKind.Kind == "namespace" {
-
-// 		}
-
-// 	}
-
-// 	return reader
-// }
-
-// func latestResourceVersion(opts *Options) error {
-// 	var latest, latestAllNamespace int
-
-// 	eventList, err := opts.ClientSet.CoreV1().Events(opts.Namespace).List(context.TODO(), metav1.ListOptions{})
-// 	if err != nil {
-// 		return err
-// 	}
-// 	latest, err = latestVersion(eventList.Items)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	eventList, err = opts.ClientSet.CoreV1().Events("").List(context.TODO(), metav1.ListOptions{})
-// 	if err != nil {
-// 		return err
-// 	}
-// 	latestAllNamespace, err = latestVersion(eventList.Items)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	opts.latestVersion = strconv.Itoa(latest)
-// 	opts.latestVersionAllNamespace = strconv.Itoa(latestAllNamespace)
-// 	return nil
-// }
-
-// func latestVersion(events []corev1.Event) (int, error) {
-// 	latest := 0
-// 	for _, event := range events {
-// 		version, err := strconv.Atoi(event.ResourceVersion)
-// 		if err != nil {
-// 			return 0, err
-// 		}
-// 		if latest < version {
-// 			latest = version
-// 		}
-// 	}
-// 	return latest, nil
-// }
+func latestVersion(events []corev1.Event) (int, error) {
+	latest := 0
+	for _, event := range events {
+		version, err := strconv.Atoi(event.ResourceVersion)
+		if err != nil {
+			return 0, err
+		}
+		if latest < version {
+			latest = version
+		}
+	}
+	return latest, nil
+}
