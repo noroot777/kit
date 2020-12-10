@@ -10,9 +10,18 @@ import (
 	"context"
 	"fmt"
 
+	appsv1beta1 "k8s.io/api/apps/v1beta1"
+	appsv1beta2 "k8s.io/api/apps/v1beta2"
+	batchv1 "k8s.io/api/batch/v1"
+	batchv1beta1 "k8s.io/api/batch/v1beta1"
+	batchv2alpha1 "k8s.io/api/batch/v2alpha1"
+	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/resource"
 	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
 	deploymentutil "k8s.io/kubectl/pkg/util/deployment"
@@ -29,36 +38,115 @@ import (
 // 2. 若相关，且map中无此object，则将involvedObject存入map，并做相应展示
 // 3. 若不相关，则放弃
 
-func activities(event corev1.Event, opts Options) {
-	involvedObj := opts.involvedObjects[event.Name]
-	var metav1Obj metav1.Object
-	switch involvedObj.Object.GetObjectKind().GroupVersionKind().Kind {
-	case "Deployment":
-		metav1Obj = involvedObj.Object.(*appsv1.Deployment)
-	case "ReplicaSet":
-		metav1Obj = involvedObj.Object.(*appsv1.ReplicaSet)
-	case "StatefulSet":
-		metav1Obj = involvedObj.Object.(*appsv1.StatefulSet)
-	case "DaemonSet":
-	case "Job":
-	case "CronJob":
-	case "ReplicationController":
-	case "Pod":
-	default:
-	}
-	// 需要一个数据结构，将各种转化后的对象存储起来，并且能根据kind获取切片
-	// 只有involvedObj kind == pod or replicaset时才需要对比
-	if involvedObj == nil {
-		for _, v := range opts.involvedObjects {
-			if metav1.IsControlledBy(metav1Obj, nobug(v)) {
+func activities(event *corev1.Event, opts *Options) {
+	eventInvolvedName := event.InvolvedObject.Name
+	eventInvolvedNamespace := event.InvolvedObject.Namespace
+	eventInvolvedKind := event.InvolvedObject.Kind
 
+	// if the involved obj of event was containes in the map, show message in the Activity View.
+	involvedObj := opts.involvedObjects[eventInvolvedName]
+	if involvedObj != nil {
+		// 在event list中展示
+		// 在活动list中展示
+		if event.Type != corev1.EventTypeNormal {
+			// 展示错误
+			s := fmt.Sprintf(" ✖️   %v/%v/%v", event.Reason, event.InvolvedObject.Kind, eventInvolvedName)
+			opts.writer.Write([]byte(s))
+		}
+		return
+	}
+
+	// TODO if event.InvolvedObject.Kind not in workload range, return
+
+	opts.writer.Write([]byte(fmt.Sprintf("%v", (opts.involvedObjects))))
+	for _, v := range opts.involvedObjects {
+		if eventInvolvedNamespace != v.Namespace {
+			continue
+		}
+
+		kind := v.Object.GetObjectKind().GroupVersionKind().Kind
+		if eventInvolvedKind == "Pod" && kind != "Deployment" {
+			pod, err := opts.ClientSet.CoreV1().Pods(eventInvolvedNamespace).Get(context.TODO(), eventInvolvedName, metav1.GetOptions{})
+			if err != nil || pod == nil {
+				// 展示错误？
+				continue
+			}
+			if metav1.IsControlledBy(pod, v.Object.(metav1.Object)) {
+				opts.involvedObjects[eventInvolvedName] = &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}
+
+				s := fmt.Sprintf("apply %v/%v/%v", eventInvolvedNamespace, eventInvolvedKind, eventInvolvedName)
+				opts.writer.Write([]byte(s))
+			}
+		} else if eventInvolvedKind == "ReplicaSet" && kind == "Deployment" {
+			rs, err := opts.ClientSet.AppsV1().ReplicaSets(eventInvolvedNamespace).Get(context.TODO(), eventInvolvedName, metav1.GetOptions{})
+			if err != nil || rs == nil {
+				// 展示错误？
+				continue
+			}
+			if metav1.IsControlledBy(rs, v.Object.(metav1.Object)) {
+				opts.involvedObjects[eventInvolvedName] = &resource.Info{Object: rs, Namespace: eventInvolvedNamespace}
+
+				s := fmt.Sprintf("apply %v/%v/%v", eventInvolvedNamespace, eventInvolvedKind, eventInvolvedName)
+				opts.writer.Write([]byte(s))
 			}
 		}
 	}
 }
 
-func nobug(info *resource.Info) metav1.Object {
-	return nil
+func switchType(obj runtime.Object) *metav1.ObjectMeta {
+	switch obj.(type) {
+	case *v1.Pod:
+		return &obj.(*v1.Pod).ObjectMeta
+	case *v1.ReplicationController:
+		return &obj.(*v1.ReplicationController).ObjectMeta
+
+		// Deployment
+	case *extensionsv1beta1.Deployment:
+		return &obj.(*extensionsv1beta1.Deployment).ObjectMeta
+	case *appsv1beta1.Deployment:
+		return &obj.(*appsv1beta1.Deployment).ObjectMeta
+	case *appsv1beta2.Deployment:
+		return &obj.(*appsv1beta2.Deployment).ObjectMeta
+	case *appsv1.Deployment:
+		return &obj.(*appsv1.Deployment).ObjectMeta
+
+		// DaemonSet
+	case *extensionsv1beta1.DaemonSet:
+		return &obj.(*extensionsv1beta1.DaemonSet).ObjectMeta
+	case *appsv1beta2.DaemonSet:
+		return &obj.(*appsv1beta2.DaemonSet).ObjectMeta
+	case *appsv1.DaemonSet:
+		return &obj.(*appsv1.DaemonSet).ObjectMeta
+
+		// ReplicaSet
+	case *extensionsv1beta1.ReplicaSet:
+		return &obj.(*extensionsv1beta1.ReplicaSet).ObjectMeta
+	case *appsv1beta2.ReplicaSet:
+		return &obj.(*appsv1beta2.ReplicaSet).ObjectMeta
+	case *appsv1.ReplicaSet:
+		return &obj.(*appsv1.ReplicaSet).ObjectMeta
+
+		// StatefulSet
+	case *appsv1beta1.StatefulSet:
+		return &obj.(*appsv1beta1.StatefulSet).ObjectMeta
+	case *appsv1beta2.StatefulSet:
+		return &obj.(*appsv1beta2.StatefulSet).ObjectMeta
+	case *appsv1.StatefulSet:
+		return &obj.(*appsv1.StatefulSet).ObjectMeta
+
+		// Job
+	case *batchv1.Job:
+		return &obj.(*batchv1.Job).ObjectMeta
+
+		// CronJob
+	case *batchv1beta1.CronJob:
+		return &obj.(*batchv1beta1.CronJob).ObjectMeta
+	case *batchv2alpha1.CronJob:
+		return &obj.(*batchv2alpha1.CronJob).ObjectMeta
+
+	default:
+		return nil
+	}
 }
 
 func deepin(info *resource.Info, opts Options) {

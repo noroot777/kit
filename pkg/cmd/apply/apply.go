@@ -182,8 +182,7 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericclioptions
 			cmdutil.CheckErr(e)
 			cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
 			cmdutil.CheckErr(e)
-			opt := kit.NewOptions(cmdNamespace, o.objects, clientSet)
-			o.Out, o.ErrOut = kit.Intercept(kit.InterceptApply, opt)
+			o.Out, o.ErrOut = kit.Intercept(kit.InterceptApply, cmdNamespace, clientSet)
 
 			cmdutil.CheckErr(o.Complete(f, cmd))
 			cmdutil.CheckErr(validateArgs(cmd, args))
@@ -604,6 +603,9 @@ See http://k8s.io/docs/reference/using-api/api-concepts/#conflicts`, err)
 	if err = printer.PrintObj(info.Object, o.Out); err != nil {
 		return err
 	}
+
+	// add by kit
+	kit.HandleInfo(info)
 
 	return nil
 }

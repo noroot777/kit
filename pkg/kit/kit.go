@@ -26,39 +26,54 @@ var (
 	columnCount = 6
 	// to keep current status
 	curr *Current
+	// options
+	opts *Options
 )
 
 // Options TODO
 type Options struct {
 	Namespace string // TODO apply -f, there are multiple namespaces
-	Objects   []*resource.Info
 	ClientSet kubernetes.Interface
 	TextView  *ui.TextView
 
-	involvedObjects map[string]*resource.Info
+	involvedNamespaces map[string]string
+	involvedObjects    map[string]*resource.Info
 
 	writer      *UIWriter
 	errorWriter *UIWriter
 	watcher     watch.Interface
 }
 
-// NewOptions create new Options
-func NewOptions(namespace string, objects []*resource.Info, clientSet *kubernetes.Clientset) *Options {
-	opts := &Options{
+// newOptions create new Options
+func newOptions(namespace string, clientSet *kubernetes.Clientset) *Options {
+	o := &Options{
 		Namespace: namespace,
-		Objects:   objects,
 		ClientSet: clientSet,
 	}
-	for _, obj := range objects {
-		opts.involvedObjects[obj.Name] = obj
+	return o
+}
+
+// HandleInfo handle with the execed info
+func HandleInfo(info *resource.Info) {
+	opts.writer.Write([]byte(fmt.Sprintf("HandleInfo: %v", info)))
+
+	metaObj := switchType(info.Object)
+	if metaObj == nil {
+		opts.writer.Write([]byte(fmt.Sprintf("have no meta object: %+v", info)))
 	}
-	return opts
+	opts.involvedObjects[metaObj.Name] = info
+	// TODO print a message to activity view. 根据不同的命令打印不同内容，eg: apply(delete/create) imds/Deployment/imds-web
+	opts.writer.Write([]byte(fmt.Sprintf("apply %v/%v/%v", metaObj.Name, info.Mapping.GroupVersionKind.Kind, metaObj.Name)))
+	if _, has := opts.involvedNamespaces[metaObj.Namespace]; !has {
+		opts.involvedNamespaces[metaObj.Namespace] = metaObj.Namespace
+	}
 }
 
 // Intercept intercept the kubectl command
-func Intercept(fn InterceptFunc, opts *Options) (out io.Writer, errorOut io.Writer) {
+func Intercept(fn InterceptFunc, namespace string, clientSet *kubernetes.Clientset) (out io.Writer, errorOut io.Writer) {
+	opts = newOptions(namespace, clientSet)
 	curr = NewCurrent(opts.Namespace)
-	err := latestResourceVersion(opts)
+	err := latestResourceVersion()
 	if err != nil {
 		fmt.Println(err)
 		return nil, nil
@@ -68,23 +83,23 @@ func Intercept(fn InterceptFunc, opts *Options) (out io.Writer, errorOut io.Writ
 		fn(opts)
 	}
 
-	drawUI(opts)
+	drawUI()
 
 	out = NewUIWriter(opts)
 	errorOut = NewUIErrorWriter(opts)
 
-	watchEvents(opts)
+	watchEvents()
 
 	return
 }
 
 // drawUI draw a interactive term ui
-func drawUI(opts *Options) {
+func drawUI() {
 	ui.InitLibrary()
 	ui.SetThemePath(".")
 	ui.SetCurrentTheme("ui")
 
-	createView(opts)
+	createView()
 
 	ui.RefreshScreen()
 	// termbox.Flush()
@@ -96,7 +111,7 @@ func Hold() {
 	ui.MainLoop()
 }
 
-func createView(opts *Options) {
+func createView() {
 	// **************
 	// * 1. draw ui *
 	// **************
@@ -238,11 +253,11 @@ func createView(opts *Options) {
 		}
 		switch index {
 		case 0:
-			changeRadioFocus(FocusOnInvolved, opts, tabEvents)
+			changeRadioFocus(FocusOnInvolved, tabEvents)
 		case 1:
-			changeRadioFocus(FocusOnCurrentNamespace, opts, tabEvents)
+			changeRadioFocus(FocusOnCurrentNamespace, tabEvents)
 		case 2:
-			changeRadioFocus(FocusOnAllNamespace, opts, tabEvents)
+			changeRadioFocus(FocusOnAllNamespace, tabEvents)
 		case -1:
 			return
 		}
@@ -268,6 +283,8 @@ func createView(opts *Options) {
 				case *corev1.Event:
 					event := e.Object.(*corev1.Event)
 
+					activities(event, opts)
+
 					// do not display the old version event
 					if event.ResourceVersion < curr.Version() {
 						continue
@@ -279,7 +296,7 @@ func createView(opts *Options) {
 							event.LastTimestamp.Format("15:04:05"),
 							event.Type,
 							event.Reason,
-							event.InvolvedObject.Name,
+							event.InvolvedObject.Kind + "/" + event.InvolvedObject.Name,
 							event.Message})
 					// move down
 					curr.MoveEach()
@@ -290,6 +307,7 @@ func createView(opts *Options) {
 					tabEvents.SetRowCount(len(curr.Events()) / columnCount)
 					// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
 					ui.PutEvent(ui.Event{Type: ui.EventRedraw})
+
 				default:
 					continue
 				}
@@ -302,6 +320,9 @@ func createView(opts *Options) {
 }
 
 func text(v []string) []string {
+	if len(v[4]) >= 30 {
+		v[4] = v[4][:27] + ".. "
+	}
 	var t = []string{
 		fmt.Sprint("#        : ", v[0]),
 		fmt.Sprint("LAST_SEEN: " + v[1]),
@@ -313,7 +334,7 @@ func text(v []string) []string {
 	return t
 }
 
-func changeRadioFocus(f FocusOn, opts *Options, tabEvents *ui.TableView) {
+func changeRadioFocus(f FocusOn, tabEvents *ui.TableView) {
 	tabEvents.SetRowCount(0)
 	tabEvents.Draw()
 	opts.watcher.Stop()
@@ -323,7 +344,7 @@ func changeRadioFocus(f FocusOn, opts *Options, tabEvents *ui.TableView) {
 	tabEvents.SetRowCount(len(curr.Events()) / columnCount)
 	tabEvents.Draw()
 
-	watchEvents(opts)
+	watchEvents()
 }
 
 func drawCell(info *ui.ColumnDrawInfo) {
@@ -346,10 +367,9 @@ func drawCell(info *ui.ColumnDrawInfo) {
 }
 
 // can not use informer, bcz `410 Gone` happened
-func watchEvents(opts *Options) {
+func watchEvents() {
 	version := curr.Version()
 	ns := curr.Namespace()
-	opts.writer.Write([]byte("ns: " + ns))
 	listOpt := metav1.ListOptions{ResourceVersion: version, ResourceVersionMatch: metav1.ResourceVersionMatchNotOlderThan}
 	watcher, err := opts.ClientSet.CoreV1().Events(ns).Watch(context.TODO(), listOpt)
 	if err != nil {
@@ -358,7 +378,7 @@ func watchEvents(opts *Options) {
 	opts.watcher = watcher
 }
 
-func latestResourceVersion(opts *Options) error {
+func latestResourceVersion() error {
 	var latest, latestAllNamespace int
 
 	eventList, err := opts.ClientSet.CoreV1().Events(opts.Namespace).List(context.TODO(), metav1.ListOptions{})
