@@ -400,6 +400,8 @@ func (o *ApplyOptions) Run() error {
 		if err := o.applyOneObject(info); err != nil {
 			errs = append(errs, err)
 		}
+		// add by kit
+		kit.HandleInfo(info)
 	}
 	// If any errors occurred during apply, then return error (or
 	// aggregate of errors).
@@ -603,9 +605,6 @@ See http://k8s.io/docs/reference/using-api/api-concepts/#conflicts`, err)
 	if err = printer.PrintObj(info.Object, o.Out); err != nil {
 		return err
 	}
-
-	// add by kit
-	kit.HandleInfo(info)
 
 	return nil
 }

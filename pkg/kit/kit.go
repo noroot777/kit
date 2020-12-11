@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -12,7 +13,9 @@ import (
 	termbox "github.com/nsf/termbox-go"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/kubernetes"
 )
@@ -47,25 +50,22 @@ type Options struct {
 // newOptions create new Options
 func newOptions(namespace string, clientSet *kubernetes.Clientset) *Options {
 	o := &Options{
-		Namespace: namespace,
-		ClientSet: clientSet,
+		Namespace:          namespace,
+		ClientSet:          clientSet,
+		involvedNamespaces: make(map[string]string),
+		involvedObjects:    make(map[string]*resource.Info),
 	}
 	return o
 }
 
 // HandleInfo handle with the execed info
 func HandleInfo(info *resource.Info) {
-	opts.writer.Write([]byte(fmt.Sprintf("HandleInfo: %v", info)))
-
-	metaObj := switchType(info.Object)
-	if metaObj == nil {
-		opts.writer.Write([]byte(fmt.Sprintf("have no meta object: %+v", info)))
-	}
-	opts.involvedObjects[metaObj.Name] = info
+	metaObj := info.Object.(*unstructured.Unstructured)
+	opts.involvedObjects[metaObj.GetName()] = info
 	// TODO print a message to activity view. 根据不同的命令打印不同内容，eg: apply(delete/create) imds/Deployment/imds-web
-	opts.writer.Write([]byte(fmt.Sprintf("apply %v/%v/%v", metaObj.Name, info.Mapping.GroupVersionKind.Kind, metaObj.Name)))
-	if _, has := opts.involvedNamespaces[metaObj.Namespace]; !has {
-		opts.involvedNamespaces[metaObj.Namespace] = metaObj.Namespace
+	// opts.writer.Write([]byte(fmt.Sprintf("apply %v/%v/%v", metaObj.GetNamespace(), info.Mapping.GroupVersionKind.Kind, metaObj.GetName())))
+	if _, has := opts.involvedNamespaces[metaObj.GetNamespace()]; !has {
+		opts.involvedNamespaces[metaObj.GetNamespace()] = metaObj.GetNamespace()
 	}
 }
 
@@ -73,7 +73,7 @@ func HandleInfo(info *resource.Info) {
 func Intercept(fn InterceptFunc, namespace string, clientSet *kubernetes.Clientset) (out io.Writer, errorOut io.Writer) {
 	opts = newOptions(namespace, clientSet)
 	curr = NewCurrent(opts.Namespace)
-	err := latestResourceVersion()
+	err := initResourceVersion()
 	if err != nil {
 		fmt.Println(err)
 		return nil, nil
@@ -304,10 +304,10 @@ func createView() {
 					curr.SetVersion(event.ResourceVersion)
 
 					txtEvent.SetText(text(curr.Events()[:columnCount]))
+					ttt(event)
 					tabEvents.SetRowCount(len(curr.Events()) / columnCount)
 					// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
 					ui.PutEvent(ui.Event{Type: ui.EventRedraw})
-
 				default:
 					continue
 				}
@@ -319,16 +319,32 @@ func createView() {
 
 }
 
+// TODO print as `kc describe event`
+func ttt(e *corev1.Event) {
+	p := printers.NewTablePrinter(printers.PrintOptions{
+		Kind:          e.GroupVersionKind().GroupKind(),
+		WithKind:      true,
+		NoHeaders:     false,
+		Wide:          true,
+		WithNamespace: true,
+		// ColumnLabels:  columnLabels,
+		ShowLabels: true,
+	})
+	p.PrintObj(e, os.Stdout)
+}
+
 func text(v []string) []string {
+	objStr := v[4]
 	if len(v[4]) >= 30 {
-		v[4] = v[4][:27] + ".. "
+		objStr = v[4][:27] + ".. "
 	}
+
 	var t = []string{
 		fmt.Sprint("#        : ", v[0]),
 		fmt.Sprint("LAST_SEEN: " + v[1]),
 		fmt.Sprint("TYPE     : " + v[2]),
 		fmt.Sprint("REASON   : " + v[3]),
-		fmt.Sprint("OBJECT   : " + v[4]),
+		fmt.Sprint("OBJECT   : " + objStr),
 		fmt.Sprint("MESSAGE  : " + v[5]),
 	}
 	return t
@@ -378,7 +394,7 @@ func watchEvents() {
 	opts.watcher = watcher
 }
 
-func latestResourceVersion() error {
+func initResourceVersion() error {
 	var latest, latestAllNamespace int
 
 	eventList, err := opts.ClientSet.CoreV1().Events(opts.Namespace).List(context.TODO(), metav1.ListOptions{})

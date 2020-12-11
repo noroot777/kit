@@ -19,8 +19,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/resource"
 	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -43,6 +43,8 @@ func activities(event *corev1.Event, opts *Options) {
 	eventInvolvedNamespace := event.InvolvedObject.Namespace
 	eventInvolvedKind := event.InvolvedObject.Kind
 
+	// opts.writer.Write([]byte(fmt.Sprintf("name: %v, kind: %v\n", eventInvolvedName, eventInvolvedKind)))
+
 	// if the involved obj of event was containes in the map, show message in the Activity View.
 	involvedObj := opts.involvedObjects[eventInvolvedName]
 	if involvedObj != nil {
@@ -58,7 +60,6 @@ func activities(event *corev1.Event, opts *Options) {
 
 	// TODO if event.InvolvedObject.Kind not in workload range, return
 
-	opts.writer.Write([]byte(fmt.Sprintf("%v", (opts.involvedObjects))))
 	for _, v := range opts.involvedObjects {
 		if eventInvolvedNamespace != v.Namespace {
 			continue
@@ -71,11 +72,20 @@ func activities(event *corev1.Event, opts *Options) {
 				// 展示错误？
 				continue
 			}
-			if metav1.IsControlledBy(pod, v.Object.(metav1.Object)) {
+
+			metaObj := switch2Object(v.Object)
+			// TODO 待debug 为何不相等？
+			opts.writer.Write([]byte(fmt.Sprintf("pod.uid: %v, metaObj.uid: %v", pod.UID, metaObj.GetUID())))
+			if metav1.IsControlledBy(pod, metaObj) {
 				opts.involvedObjects[eventInvolvedName] = &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}
 
-				s := fmt.Sprintf("apply %v/%v/%v", eventInvolvedNamespace, eventInvolvedKind, eventInvolvedName)
+				s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
 				opts.writer.Write([]byte(s))
+				return
+			} else if string(pod.UID) == string(metaObj.GetUID()) {
+				s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
+				opts.writer.Write([]byte(s))
+				return
 			}
 		} else if eventInvolvedKind == "ReplicaSet" && kind == "Deployment" {
 			rs, err := opts.ClientSet.AppsV1().ReplicaSets(eventInvolvedNamespace).Get(context.TODO(), eventInvolvedName, metav1.GetOptions{})
@@ -83,22 +93,36 @@ func activities(event *corev1.Event, opts *Options) {
 				// 展示错误？
 				continue
 			}
-			if metav1.IsControlledBy(rs, v.Object.(metav1.Object)) {
+
+			if metav1.IsControlledBy(rs, switch2Object(v.Object)) {
 				opts.involvedObjects[eventInvolvedName] = &resource.Info{Object: rs, Namespace: eventInvolvedNamespace}
 
-				s := fmt.Sprintf("apply %v/%v/%v", eventInvolvedNamespace, eventInvolvedKind, eventInvolvedName)
+				s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
 				opts.writer.Write([]byte(s))
+				return
 			}
 		}
 	}
 }
 
-func switchType(obj runtime.Object) *metav1.ObjectMeta {
+func switch2Object(obj runtime.Object) metav1.Object {
+	var ret metav1.Object
+	ret = switch2ObjectMeta(obj)
+	if isNilPtr(ret) {
+		switch obj.(type) {
+		case *unstructured.Unstructured:
+			ret = obj.(*unstructured.Unstructured)
+		}
+	}
+	return ret
+}
+
+func switch2ObjectMeta(obj runtime.Object) *metav1.ObjectMeta {
 	switch obj.(type) {
-	case *v1.Pod:
-		return &obj.(*v1.Pod).ObjectMeta
-	case *v1.ReplicationController:
-		return &obj.(*v1.ReplicationController).ObjectMeta
+	case *corev1.Pod:
+		return &obj.(*corev1.Pod).ObjectMeta
+	case *corev1.ReplicationController:
+		return &obj.(*corev1.ReplicationController).ObjectMeta
 
 		// Deployment
 	case *extensionsv1beta1.Deployment:
@@ -145,6 +169,7 @@ func switchType(obj runtime.Object) *metav1.ObjectMeta {
 		return &obj.(*batchv2alpha1.CronJob).ObjectMeta
 
 	default:
+		// "no match type for %T", t
 		return nil
 	}
 }

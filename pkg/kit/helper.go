@@ -1,6 +1,8 @@
 package kit
 
 import (
+	"reflect"
+
 	mapset "github.com/deckarep/golang-set"
 	ui "github.com/noroot777/clui"
 )
@@ -39,6 +41,11 @@ func NewUIErrorWriter(o *Options) *UIWriter {
 	}
 	o.errorWriter = w
 	return w
+}
+
+func isNilPtr(x interface{}) bool {
+	v := reflect.ValueOf(x)
+	return v.Kind() == reflect.Ptr && v.IsNil()
 }
 
 // FocusOn event scope. Use to filter events
