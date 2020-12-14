@@ -141,11 +141,11 @@ func createView() {
 	frmRight := ui.CreateFrame(frmExTips, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
 	frmRight.SetPack(ui.Vertical)
 	frmRight.SetPaddings(1, 1)
-	frmRight.SetTitle(" Kubernetes Events ")
+	frmRight.SetTitle(" Kubernetes Event ")
 
 	// frame include radioGroup
 	frmRadio := ui.CreateFrame(frmRight, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
-	frmRadio.SetTitle(" Choose Events Scope ")
+	frmRadio.SetTitle(" Choose Event Scope ")
 	frmRadio.SetPack(ui.Horizontal)
 	frmRadio.SetPaddings(5, 1)
 	frmRadio.SetAlign(ui.AlignRight)
@@ -166,7 +166,7 @@ func createView() {
 
 	// frame include tabEvents
 	frmEvents := ui.CreateFrame(frmRight, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
-	frmEvents.SetTitle(" Events List ")
+	frmEvents.SetTitle(" Event List ")
 	frmEvents.ResizeChildren()
 	// TableView of events
 	tabEvents := ui.CreateTableView(frmEvents, ui.AutoSize, ui.AutoSize, 1)
@@ -188,7 +188,7 @@ func createView() {
 
 	// frame include txtEvent
 	frmRightBottom := ui.CreateFrame(frmRight, ui.AutoSize, 10, ui.BorderThin, ui.Fixed)
-	frmRightBottom.SetTitle(" Events Detail ")
+	frmRightBottom.SetTitle(" Event Detail ")
 	frmRightBottom.SetPack(ui.Vertical)
 	// TextView show event detail
 	txtEvent := ui.CreateTextView(frmRightBottom, ui.AutoSize, ui.AutoSize, 1)
@@ -304,7 +304,7 @@ func createView() {
 					curr.SetVersion(event.ResourceVersion)
 
 					txtEvent.SetText(text(curr.Events()[:columnCount]))
-					ttt(event)
+					// ttt(event)
 					tabEvents.SetRowCount(len(curr.Events()) / columnCount)
 					// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
 					ui.PutEvent(ui.Event{Type: ui.EventRedraw})

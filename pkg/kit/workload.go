@@ -54,8 +54,8 @@ func activities(event *corev1.Event, opts *Options) {
 			// 展示错误
 			s := fmt.Sprintf(" ✖️   %v/%v/%v", event.Reason, event.InvolvedObject.Kind, eventInvolvedName)
 			opts.writer.Write([]byte(s))
+			return
 		}
-		return
 	}
 
 	// TODO if event.InvolvedObject.Kind not in workload range, return
@@ -74,8 +74,6 @@ func activities(event *corev1.Event, opts *Options) {
 			}
 
 			metaObj := switch2Object(v.Object)
-			// TODO 待debug 为何不相等？
-			opts.writer.Write([]byte(fmt.Sprintf("pod.uid: %v, metaObj.uid: %v", pod.UID, metaObj.GetUID())))
 			if metav1.IsControlledBy(pod, metaObj) {
 				opts.involvedObjects[eventInvolvedName] = &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}
 
