@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -12,12 +11,14 @@ import (
 	ui "github.com/noroot777/clui"
 	termbox "github.com/nsf/termbox-go"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/cli-runtime/pkg/printers"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/kubectl/pkg/describe"
 )
 
 var (
@@ -85,8 +86,10 @@ func Intercept(fn InterceptFunc, namespace string, clientSet *kubernetes.Clients
 
 	drawUI()
 
-	out = NewUIWriter(opts)
-	errorOut = NewUIErrorWriter(opts)
+	opts.writer = NewUIWriter(opts.TextView)
+	out = opts.writer
+	opts.errorWriter = NewUIErrorWriter(opts.TextView)
+	errorOut = opts.errorWriter
 
 	watchEvents()
 
@@ -303,8 +306,10 @@ func createView() {
 					// set the latest resource version
 					curr.SetVersion(event.ResourceVersion)
 
-					txtEvent.SetText(text(curr.Events()[:columnCount]))
-					// ttt(event)
+					out := NewNormalUIWriter(txtEvent)
+					describeEvent(event, out)
+					// txtEvent.SetText([]string{describeEvent(event)})
+
 					tabEvents.SetRowCount(len(curr.Events()) / columnCount)
 					// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
 					ui.PutEvent(ui.Event{Type: ui.EventRedraw})
@@ -319,18 +324,35 @@ func createView() {
 
 }
 
-// TODO print as `kc describe event`
-func ttt(e *corev1.Event) {
-	p := printers.NewTablePrinter(printers.PrintOptions{
-		Kind:          e.GroupVersionKind().GroupKind(),
-		WithKind:      true,
-		NoHeaders:     false,
-		Wide:          true,
-		WithNamespace: true,
-		// ColumnLabels:  columnLabels,
-		ShowLabels: true,
-	})
-	p.PrintObj(e, os.Stdout)
+func describeEvent(e *corev1.Event, out io.Writer) {
+	getter := genericclioptions.NewConfigFlags(false)
+
+	var Describer = func(mapping *meta.RESTMapping) (describe.ResourceDescriber, error) {
+		// return describe.Describer(getter, mapping)
+		clientConfig, err := getter.ToRESTConfig()
+		if err != nil {
+			return nil, err
+		}
+		d, _ := GenericDescriberFor(mapping, clientConfig)
+		return d, nil
+	}
+
+	b := *resource.NewBuilder(getter)
+	r := b.Unstructured().
+		ContinueOnError().
+		NamespaceParam(e.Namespace).DefaultNamespace().AllNamespaces(false).
+		LabelSelectorParam("").
+		ResourceTypeOrNameArgs(true, "event", e.Name).
+		Flatten().
+		Do()
+	infos, _ := r.Infos()
+
+	if len(infos) > 0 {
+		mapping := infos[0].ResourceMapping()
+		describer, _ := Describer(mapping)
+		s, _ := describer.Describe(infos[0].Namespace, infos[0].Name, describe.DescriberSettings{ShowEvents: false})
+		fmt.Fprintf(out, s)
+	}
 }
 
 func text(v []string) []string {

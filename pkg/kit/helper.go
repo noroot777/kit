@@ -9,37 +9,47 @@ import (
 
 // UIWriter write to UI
 type UIWriter struct {
-	errorWriter bool
-	TxtView     *ui.TextView
+	Type    string
+	TxtView *ui.TextView
 }
 
 func (t *UIWriter) Write(p []byte) (n int, err error) {
-	if t.errorWriter {
+	switch t.Type {
+	case "error":
 		t.TxtView.SetTextColor(ui.ColorRed)
 		t.TxtView.AddText([]string{"  ✖️  " + string(p)})
-	} else {
+	case "normal":
+		t.TxtView.AddText([]string{string(p)})
+	case "correct":
 		t.TxtView.AddText([]string{"  ✅  " + string(p)})
 	}
 	return len(p), nil
 }
 
 // NewUIWriter creates writer
-func NewUIWriter(o *Options) *UIWriter {
+func NewUIWriter(tv *ui.TextView) *UIWriter {
 	w := &UIWriter{
-		errorWriter: false,
-		TxtView:     o.TextView,
+		Type:    "correct",
+		TxtView: tv,
 	}
-	o.writer = w
+	return w
+}
+
+// NewNormalUIWriter returns a normal writer
+func NewNormalUIWriter(tv *ui.TextView) *UIWriter {
+	w := &UIWriter{
+		Type:    "normal",
+		TxtView: tv,
+	}
 	return w
 }
 
 // NewUIErrorWriter creates error writer
-func NewUIErrorWriter(o *Options) *UIWriter {
+func NewUIErrorWriter(tv *ui.TextView) *UIWriter {
 	w := &UIWriter{
-		errorWriter: true,
-		TxtView:     o.TextView,
+		Type:    "error",
+		TxtView: tv,
 	}
-	o.errorWriter = w
 	return w
 }
 
