@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/kubectl/pkg/describe"
@@ -49,41 +48,35 @@ func TestIdea(t *testing.T) {
 		// FilenameParam(o.EnforceNamespace, o.FilenameOptions).
 		LabelSelectorParam("").
 		ResourceTypeOrNameArgs(true, "event", "imds-web-764f9c4bb8.1650c4ade4451b20").
-		// Flatten().
+		Flatten().
 		Do()
-	// fmt.Printf("err: %v\n", r.Err())
-	// fmt.Printf("r.mapper: %+v\n", r.Mapper())
 	infos, _ := r.Infos()
-	// fmt.Printf("r: %+v\n", infos)
-	// fmt.Printf("r: %+v\n", infos[0].Object)
-	errs := sets.NewString()
-	first := true
+	// errs := sets.NewString()
+	// first := true
 
 	for _, info := range infos {
 		mapping := info.ResourceMapping()
-		describer, err := Describer(mapping)
-		if err != nil {
-			if errs.Has(err.Error()) {
-				continue
-			}
-			// allErrs = append(allErrs, err)
-			errs.Insert(err.Error())
-			continue
-		}
-		s, err := describer.Describe(info.Namespace, info.Name, describe.DescriberSettings{ShowEvents: false})
-		if err != nil {
-			if errs.Has(err.Error()) {
-				continue
-			}
-			// allErrs = append(allErrs, err)
-			errs.Insert(err.Error())
-			continue
-		}
-		if first {
-			first = false
-			fmt.Printf(s)
-		} else {
-			fmt.Printf("\n\n%s", s)
-		}
+		describer, _ := Describer(mapping)
+		// if err != nil {
+		// 	if errs.Has(err.Error()) {
+		// 		continue
+		// 	}
+		// 	errs.Insert(err.Error())
+		// 	continue
+		// }
+		s, _ := describer.Describe(info.Namespace, info.Name, describe.DescriberSettings{ShowEvents: false})
+		// if err != nil {
+		// 	if errs.Has(err.Error()) {
+		// 		continue
+		// 	}
+		// 	errs.Insert(err.Error())
+		// 	continue
+		// }
+		// if first {
+		// 	first = false
+		fmt.Printf(s)
+		// } else {
+		// 	fmt.Printf("\n\n%s", s)
+		// }
 	}
 }
