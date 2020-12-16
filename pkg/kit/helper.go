@@ -5,6 +5,7 @@ import (
 
 	mapset "github.com/deckarep/golang-set"
 	ui "github.com/noroot777/clui"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // UIWriter write to UI
@@ -80,9 +81,9 @@ type Current struct {
 	selectedRadio FocusOn
 
 	// events displaying in Event TableView
-	events01 []string // for tab 1: Involved Objects
-	events02 []string // for tab 2: Current namespace
-	events03 []string // for tab 3: all namespaces
+	events01 []*corev1.Event // for tab 1: Involved Objects
+	events02 []*corev1.Event // for tab 2: Current namespace
+	events03 []*corev1.Event // for tab 3: all namespaces
 
 	visitedSet mapset.Set
 	// row numbers set of visited
@@ -111,7 +112,7 @@ func NewCurrent(ns string) *Current {
 }
 
 // Events return the current selection Events slice
-func (c *Current) Events() []string {
+func (c *Current) Events() []*corev1.Event {
 	switch c.selectedRadio {
 	case FocusOnInvolved:
 		return c.events01
@@ -124,14 +125,14 @@ func (c *Current) Events() []string {
 }
 
 // AppendEvent append event
-func (c *Current) AppendEvent(event []string) {
+func (c *Current) AppendEvent(event *corev1.Event) {
 	switch c.selectedRadio {
 	case FocusOnInvolved:
-		c.events01 = append(event, c.events01...)
+		c.events01 = append([]*corev1.Event{event}, c.events01...)
 	case FocusOnCurrentNamespace:
-		c.events02 = append(event, c.events02...)
+		c.events02 = append([]*corev1.Event{event}, c.events02...)
 	case FocusOnAllNamespace:
-		c.events03 = append(event, c.events03...)
+		c.events03 = append([]*corev1.Event{event}, c.events03...)
 	}
 }
 

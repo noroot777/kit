@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,7 +28,7 @@ var (
 	// values lock
 	mtx sync.RWMutex
 	// count of Event table(include the NO. column)
-	columnCount = 6
+	// columnCount = 6
 	// to keep current status
 	curr *Current
 	// options
@@ -136,9 +137,6 @@ func createView() {
 	for _, err := range Errors {
 		txtActivity.AddText([]string{"⚠️ " + err.Error()})
 	}
-	// txtActivity.AddText([]string{" ⚠️   Namespace created!"})
-	// txtActivity.AddText([]string{" ✅   Namespace created!"})
-	// txtActivity.AddText([]string{" ✖️   Namespace created!"})
 
 	// frame include frmRadio and frmEvents
 	frmRight := ui.CreateFrame(frmExTips, ui.AutoSize, ui.AutoSize, ui.BorderThin, ui.AutoSize)
@@ -181,6 +179,7 @@ func createView() {
 		{Title: "REASON", Width: 20, Alignment: ui.AlignLeft},
 		{Title: "OBJECT", Width: 30, Alignment: ui.AlignLeft},
 		{Title: "MESSAGE", Width: 100, Alignment: ui.AlignLeft},
+		{Title: "NAME", Width: 30, Alignment: ui.AlignLeft},
 	}
 	tabEvents.SetColumns(cols)
 	tabEvents.SetRowCount(0)
@@ -190,12 +189,12 @@ func createView() {
 	tabEvents.SetShowRowNumber(false)
 
 	// frame include txtEvent
-	frmRightBottom := ui.CreateFrame(frmRight, ui.AutoSize, 10, ui.BorderThin, ui.Fixed)
+	frmRightBottom := ui.CreateFrame(frmRight, ui.AutoSize, 20, ui.BorderThin, ui.Fixed)
 	frmRightBottom.SetTitle(" Event Detail ")
 	frmRightBottom.SetPack(ui.Vertical)
 	// TextView show event detail
 	txtEvent := ui.CreateTextView(frmRightBottom, ui.AutoSize, ui.AutoSize, 1)
-	txtEvent.SetShowScroll(false)
+	txtEvent.SetShowScroll(true)
 	txtEvent.SetWordWrap(true)
 	txtEvent.SetActive(false)
 
@@ -232,13 +231,73 @@ func createView() {
 		return true
 	}, inputEscMode)
 
-	tabEvents.OnDrawCell(drawCell)
+	tabEvents.OnDrawCell(func(info *ui.ColumnDrawInfo) {
+		mtx.Lock()
+		defer mtx.Unlock()
+
+		if len(curr.Events()) > 0 {
+			event := curr.Events()[info.Row : info.Row+1][0]
+			switch info.Col {
+			case 0:
+				info.Text = strconv.Itoa(len(curr.Events()) - info.Row)
+			case 1:
+				info.Text = event.LastTimestamp.Format("15:04:05")
+			case 2:
+				info.Text = event.Type
+			case 3:
+				info.Text = event.Reason
+			case 4:
+				obj := event.InvolvedObject.Kind + "/" + event.InvolvedObject.Name
+				if len(obj) >= 30 {
+					info.Text = obj[:27] + ".. "
+				} else {
+					info.Text = obj
+				}
+			case 5:
+				if len(event.Message) >= 100 {
+					info.Text = event.Message[:97] + ".. "
+				} else {
+					info.Text = event.Message
+				}
+			case 6:
+				if curr.SelectedRadio() == FocusOnAllNamespace {
+					col := tabEvents.Columns()[6]
+					col.Title = "NAMESPACE"
+					tabEvents.SetColumnInfo(6, col)
+					info.Text = event.Namespace
+				} else {
+					col := tabEvents.Columns()[6]
+					col.Title = "NAME"
+					tabEvents.SetColumnInfo(6, col)
+					if len(event.Name) >= 30 {
+						info.Text = event.Name[:27] + ".. "
+					} else {
+						info.Text = event.Name
+					}
+				}
+			}
+			// set visited row's bg color
+			if curr.VisitedSet().Contains(info.Row) {
+				if info.RowSelected {
+					info.Fg = ui.ColorWhiteBold
+				} else {
+					info.Fg = ui.ColorWhite
+				}
+			} else {
+				info.Fg = ui.ColorYellowBold
+			}
+		}
+	})
 
 	tabEvents.OnSelectCell(func(selectedCol int, selectedRow int) {
 		mtx.Lock()
 		defer mtx.Unlock()
 
-		txtEvent.SetText(text(curr.Events()[selectedRow*columnCount : (selectedRow+1)*columnCount]))
+		// event := curr.Events()[len(curr.Events())-(selectedRow+1) : len(curr.Events())-selectedRow][0]
+		event := curr.Events()[selectedRow : selectedRow+1][0]
+		txtEvent.SetText([]string{""})
+		describeEvent(event, NewNormalUIWriter(txtEvent))
+
 		tabEvents.SetSelectedRow(selectedRow)
 		curr.VisitedSet().Add(selectedRow)
 	})
@@ -293,24 +352,16 @@ func createView() {
 						continue
 					}
 
-					curr.AppendEvent(
-						[]string{
-							strconv.Itoa(len(curr.Events())/columnCount + 1),
-							event.LastTimestamp.Format("15:04:05"),
-							event.Type,
-							event.Reason,
-							event.InvolvedObject.Kind + "/" + event.InvolvedObject.Name,
-							event.Message})
+					curr.AppendEvent(event)
 					// move down
 					curr.MoveEach()
 					// set the latest resource version
 					curr.SetVersion(event.ResourceVersion)
 
-					out := NewNormalUIWriter(txtEvent)
-					describeEvent(event, out)
-					// txtEvent.SetText([]string{describeEvent(event)})
+					txtEvent.SetText([]string{""})
+					describeEvent(event, NewNormalUIWriter(txtEvent))
 
-					tabEvents.SetRowCount(len(curr.Events()) / columnCount)
+					tabEvents.SetRowCount(len(curr.Events()))
 					// tabEvents.Draw() here is not taking effect here, so refresh ui hardly.
 					ui.PutEvent(ui.Event{Type: ui.EventRedraw})
 				default:
@@ -328,13 +379,7 @@ func describeEvent(e *corev1.Event, out io.Writer) {
 	getter := genericclioptions.NewConfigFlags(false)
 
 	var Describer = func(mapping *meta.RESTMapping) (describe.ResourceDescriber, error) {
-		// return describe.Describer(getter, mapping)
-		clientConfig, err := getter.ToRESTConfig()
-		if err != nil {
-			return nil, err
-		}
-		d, _ := GenericDescriberFor(mapping, clientConfig)
-		return d, nil
+		return describe.Describer(getter, mapping)
 	}
 
 	b := *resource.NewBuilder(getter)
@@ -351,25 +396,13 @@ func describeEvent(e *corev1.Event, out io.Writer) {
 		mapping := infos[0].ResourceMapping()
 		describer, _ := Describer(mapping)
 		s, _ := describer.Describe(infos[0].Namespace, infos[0].Name, describe.DescriberSettings{ShowEvents: false})
-		fmt.Fprintf(out, s)
+		lines := strings.Split(s, "\n")
+		for _, line := range lines {
+			fmt.Fprintf(out, line)
+		}
+	} else {
+		fmt.Fprintf(out, "No details")
 	}
-}
-
-func text(v []string) []string {
-	objStr := v[4]
-	if len(v[4]) >= 30 {
-		objStr = v[4][:27] + ".. "
-	}
-
-	var t = []string{
-		fmt.Sprint("#        : ", v[0]),
-		fmt.Sprint("LAST_SEEN: " + v[1]),
-		fmt.Sprint("TYPE     : " + v[2]),
-		fmt.Sprint("REASON   : " + v[3]),
-		fmt.Sprint("OBJECT   : " + objStr),
-		fmt.Sprint("MESSAGE  : " + v[5]),
-	}
-	return t
 }
 
 func changeRadioFocus(f FocusOn, tabEvents *ui.TableView) {
@@ -379,29 +412,10 @@ func changeRadioFocus(f FocusOn, tabEvents *ui.TableView) {
 
 	curr.SetSelectedRadio(f)
 	curr.SetNamespace(opts.Namespace)
-	tabEvents.SetRowCount(len(curr.Events()) / columnCount)
+	tabEvents.SetRowCount(len(curr.Events()))
 	tabEvents.Draw()
 
 	watchEvents()
-}
-
-func drawCell(info *ui.ColumnDrawInfo) {
-	mtx.Lock()
-	defer mtx.Unlock()
-
-	if len(curr.Events()) > 0 {
-		info.Text = curr.Events()[info.Row*columnCount+info.Col]
-		// set visited row's bg color
-		if curr.VisitedSet().Contains(info.Row) {
-			if info.RowSelected {
-				info.Fg = ui.ColorWhiteBold
-			} else {
-				info.Fg = ui.ColorWhite
-			}
-		} else {
-			info.Fg = ui.ColorYellowBold
-		}
-	}
 }
 
 // can not use informer, bcz `410 Gone` happened
