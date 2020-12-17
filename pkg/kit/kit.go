@@ -37,9 +37,9 @@ var (
 
 // Options TODO
 type Options struct {
-	Namespace string // TODO apply -f, there are multiple namespaces
-	ClientSet kubernetes.Interface
-	TextView  *ui.TextView
+	Namespace      string // TODO apply -f, there are multiple namespaces
+	ClientSet      kubernetes.Interface
+	ActivityWindow *ui.TextView
 
 	involvedNamespaces map[string]string
 	involvedObjects    map[string]*resource.Info
@@ -87,9 +87,9 @@ func Intercept(fn InterceptFunc, namespace string, clientSet *kubernetes.Clients
 
 	drawUI()
 
-	opts.writer = NewUIWriter(opts.TextView)
+	opts.writer = NewUIWriter(opts.ActivityWindow)
 	out = opts.writer
-	opts.errorWriter = NewUIErrorWriter(opts.TextView)
+	opts.errorWriter = NewUIErrorWriter(opts.ActivityWindow)
 	errorOut = opts.errorWriter
 
 	watchEvents()
@@ -131,7 +131,7 @@ func createView() {
 
 	// TextView show activities
 	txtActivity := ui.CreateTextView(frmLeft, ui.AutoSize, ui.AutoSize, 1)
-	opts.TextView = txtActivity
+	opts.ActivityWindow = txtActivity
 	txtActivity.SetShowScroll(false)
 	txtActivity.SetWordWrap(true)
 	for _, err := range Errors {
@@ -236,7 +236,7 @@ func createView() {
 		// defer mtx.Unlock()
 
 		if len(curr.Events()) > 0 {
-			event := curr.Events()[info.Row : info.Row+1][0]
+			event := curr.Events()[info.Row]
 			switch info.Col {
 			case 0:
 				info.Text = strconv.Itoa(len(curr.Events()) - info.Row)
@@ -293,7 +293,7 @@ func createView() {
 		// mtx.Lock()
 		// defer mtx.Unlock()
 
-		event := curr.Events()[selectedRow : selectedRow+1][0]
+		event := curr.Events()[selectedRow]
 		txtEvent.SetText([]string{""})
 		describeEvent(event, NewNormalUIWriter(txtEvent))
 
