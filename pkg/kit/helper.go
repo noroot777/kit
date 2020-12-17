@@ -95,6 +95,9 @@ type Current struct {
 	resourceVersion, resourceVersionAllNamespace string
 
 	namespace string
+
+	// event names that kit recorded in Activity Window
+	recordedEvents mapset.Set
 }
 
 // NewCurrent creates a new Current
@@ -108,6 +111,7 @@ func NewCurrent(ns string) *Current {
 	// default selected radio is No.2
 	curr.SetSelectedRadio(FocusOnCurrentNamespace)
 	curr.namespace = ns
+	curr.recordedEvents = mapset.NewSet()
 	return curr
 }
 

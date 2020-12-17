@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/resource"
 	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
-	deploymentutil "k8s.io/kubectl/pkg/util/deployment"
 )
 
 // 1. 生成相关的资源组合
@@ -38,7 +37,11 @@ import (
 // 2. 若相关，且map中无此object，则将involvedObject存入map，并做相应展示
 // 3. 若不相关，则放弃
 
-func activities(event *corev1.Event, opts *Options) {
+func activities(event *corev1.Event, opts *Options, curr *Current) {
+	if curr.recordedEvents.Contains(event.Name) {
+		return
+	}
+
 	eventInvolvedName := event.InvolvedObject.Name
 	eventInvolvedNamespace := event.InvolvedObject.Namespace
 	eventInvolvedKind := event.InvolvedObject.Kind
@@ -79,10 +82,12 @@ func activities(event *corev1.Event, opts *Options) {
 
 				s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
 				opts.writer.Write([]byte(s))
+				curr.recordedEvents.Add(event.Name)
 				return
 			} else if string(pod.UID) == string(metaObj.GetUID()) {
 				s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
 				opts.writer.Write([]byte(s))
+				curr.recordedEvents.Add(event.Name)
 				return
 			}
 		} else if eventInvolvedKind == "ReplicaSet" && kind == "Deployment" {
@@ -97,6 +102,7 @@ func activities(event *corev1.Event, opts *Options) {
 
 				s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
 				opts.writer.Write([]byte(s))
+				curr.recordedEvents.Add(event.Name)
 				return
 			}
 		}
@@ -169,46 +175,6 @@ func switch2ObjectMeta(obj runtime.Object) *metav1.ObjectMeta {
 	default:
 		// "no match type for %T", t
 		return nil
-	}
-}
-
-func deepin(info *resource.Info, opts Options) {
-	switch info.Object.GetObjectKind().GroupVersionKind().Kind {
-	case "Deployment":
-		d := info.Object.(*appsv1.Deployment)
-		_, _, newRS, err := deploymentutil.GetAllReplicaSets(d, opts.ClientSet.AppsV1())
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-		pods, err := getControlleePods(newRS, opts.ClientSet.CoreV1())
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-		fmt.Println(len(pods))
-	case "ReplicaSet":
-		rs := info.Object.(*appsv1.ReplicaSet)
-		pods, err := getControlleePods(rs, opts.ClientSet.CoreV1())
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-		fmt.Println(len(pods))
-	case "StatefulSet":
-		ss := info.Object.(*appsv1.StatefulSet)
-		pods, err := getControlleePods(ss, opts.ClientSet.CoreV1())
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-		fmt.Println(len(pods))
-	case "DaemonSet":
-		// loop pods
-	case "Job":
-		// loop pods
-	case "CronJob":
-		// loop pods
-	case "ReplicationController":
-		// loop pods
-	case "Pod":
-	default:
 	}
 }
 

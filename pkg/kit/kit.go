@@ -200,7 +200,7 @@ func createView() {
 
 	frmTips := ui.CreateFrame(view, ui.AutoSize, ui.AutoSize, ui.BorderNone, ui.Fixed)
 	txtTips := ui.CreateTextView(frmTips, ui.AutoSize, 1, 1)
-	txtTips.SetText([]string{" * ctrl+e: change interactive mode - text selection or mouse;   ctrl+q: exit;   esc: exit;   or click the top right corner to exit;"})
+	txtTips.SetText([]string{" * ctrl+e: change interactive mode - text selection enable or mouse enable;   ctrl+q: exit;   esc: exit;   or click the top right corner to exit;"})
 	txtTips.SetTextColor(termbox.ColorDarkGray | termbox.AttrBold)
 
 	// ********************************
@@ -232,8 +232,8 @@ func createView() {
 	}, inputEscMode)
 
 	tabEvents.OnDrawCell(func(info *ui.ColumnDrawInfo) {
-		mtx.Lock()
-		defer mtx.Unlock()
+		// mtx.Lock()
+		// defer mtx.Unlock()
 
 		if len(curr.Events()) > 0 {
 			event := curr.Events()[info.Row : info.Row+1][0]
@@ -290,10 +290,9 @@ func createView() {
 	})
 
 	tabEvents.OnSelectCell(func(selectedCol int, selectedRow int) {
-		mtx.Lock()
-		defer mtx.Unlock()
+		// mtx.Lock()
+		// defer mtx.Unlock()
 
-		// event := curr.Events()[len(curr.Events())-(selectedRow+1) : len(curr.Events())-selectedRow][0]
 		event := curr.Events()[selectedRow : selectedRow+1][0]
 		txtEvent.SetText([]string{""})
 		describeEvent(event, NewNormalUIWriter(txtEvent))
@@ -340,12 +339,12 @@ func createView() {
 				if !ok {
 					continue
 				}
-				mtx.Lock()
+				// mtx.Lock()
 				switch e.Object.(type) {
 				case *corev1.Event:
 					event := e.Object.(*corev1.Event)
 
-					activities(event, opts)
+					activities(event, opts, curr)
 
 					// do not display the old version event
 					if event.ResourceVersion < curr.Version() {
@@ -368,7 +367,7 @@ func createView() {
 					continue
 				}
 
-				mtx.Unlock()
+				// mtx.Unlock()
 			}
 		}
 	}()
