@@ -65,8 +65,6 @@ type FocusOn int
 const (
 	// FocusOnInvolved all events
 	FocusOnInvolved FocusOn = iota
-	// FocusOnCurrentNamespace current namespace's events
-	FocusOnCurrentNamespace
 	// FocusOnAllNamespace current objects and children's events
 	FocusOnAllNamespace
 )
@@ -82,19 +80,18 @@ type Current struct {
 
 	// events displaying in Event TableView
 	events01 []*corev1.Event // for tab 1: Involved Objects
-	events02 []*corev1.Event // for tab 2: Current namespace
 	events03 []*corev1.Event // for tab 3: all namespaces
 
 	visitedSet mapset.Set
 	// row numbers set of visited
 	visitedRows01 mapset.Set // for tab 1: Involved Objects
-	visitedRows02 mapset.Set // for tab 2: Current namespace
 	visitedRows03 mapset.Set // for tab 3: all namespaces
 
-	// event's resourceVersion last time
-	resourceVersion, resourceVersionAllNamespace string
+	// event's latest resourceVersion
+	resourceVersionOfInvolvedNS, resourceVersionOfAllNS string
 
-	namespace string
+	// involved namespace set
+	namespace mapset.Set
 
 	// event names that kit recorded in Activity Window
 	recordedEvents mapset.Set
@@ -105,12 +102,12 @@ func NewCurrent(ns string) *Current {
 	curr := &Current{
 		// row numbers map of visited
 		visitedRows01: mapset.NewSet(),
-		visitedRows02: mapset.NewSet(),
 		visitedRows03: mapset.NewSet(),
+		namespace:     mapset.NewSet(),
 	}
-	// default selected radio is No.2
-	curr.SetSelectedRadio(FocusOnCurrentNamespace)
-	curr.namespace = ns
+	// default selected radio is No.1
+	curr.SetSelectedRadio(FocusOnInvolved)
+	curr.namespace.Add(ns)
 	curr.recordedEvents = mapset.NewSet()
 	return curr
 }
@@ -120,8 +117,6 @@ func (c *Current) Events() []*corev1.Event {
 	switch c.selectedRadio {
 	case FocusOnInvolved:
 		return c.events01
-	case FocusOnCurrentNamespace:
-		return c.events02
 	case FocusOnAllNamespace:
 		return c.events03
 	}
@@ -133,8 +128,6 @@ func (c *Current) AppendEvent(event *corev1.Event) {
 	switch c.selectedRadio {
 	case FocusOnInvolved:
 		c.events01 = append([]*corev1.Event{event}, c.events01...)
-	case FocusOnCurrentNamespace:
-		c.events02 = append([]*corev1.Event{event}, c.events02...)
 	case FocusOnAllNamespace:
 		c.events03 = append([]*corev1.Event{event}, c.events03...)
 	}
@@ -143,13 +136,13 @@ func (c *Current) AppendEvent(event *corev1.Event) {
 // SetVersion set the resource version
 func (c *Current) SetVersion(version string) {
 	switch c.selectedRadio {
-	case FocusOnInvolved, FocusOnCurrentNamespace:
-		if curr.resourceVersion < version {
-			curr.resourceVersion = version
+	case FocusOnInvolved:
+		if curr.resourceVersionOfInvolvedNS < version {
+			curr.resourceVersionOfInvolvedNS = version
 		}
 	case FocusOnAllNamespace:
-		if curr.resourceVersionAllNamespace < version {
-			curr.resourceVersionAllNamespace = version
+		if curr.resourceVersionOfAllNS < version {
+			curr.resourceVersionOfAllNS = version
 		}
 	}
 }
@@ -157,34 +150,34 @@ func (c *Current) SetVersion(version string) {
 // Version return the resource version
 func (c *Current) Version() string {
 	switch c.selectedRadio {
-	case FocusOnInvolved, FocusOnCurrentNamespace:
-		return curr.resourceVersion
+	case FocusOnInvolved:
+		return curr.resourceVersionOfInvolvedNS
 	case FocusOnAllNamespace:
-		return curr.resourceVersionAllNamespace
+		return curr.resourceVersionOfAllNS
 	}
 	return "0"
 }
 
-// SetNamespace set the namespace
-func (c *Current) SetNamespace(ns string) {
-	curr.namespace = ns
+// AddNamespace set the namespace
+func (c *Current) AddNamespace(ns string) {
+	curr.namespace.Add(ns)
 }
 
-// Namespace return the namespace
-func (c *Current) Namespace() string {
+// Namespace return the namespace and isall flag
+func (c *Current) Namespace() (mapset.Set, bool) {
 	switch c.selectedRadio {
-	case FocusOnInvolved, FocusOnCurrentNamespace:
-		return curr.namespace
+	case FocusOnInvolved:
+		return curr.namespace, false
 	case FocusOnAllNamespace:
-		return ""
+		return nil, true
 	}
-	return ""
+	return nil, true
 }
 
 // InitVersions init the versions
-func (c *Current) InitVersions(resourceVersion string, resourceVersionAllNamespace string) {
-	c.resourceVersion = resourceVersion
-	c.resourceVersionAllNamespace = resourceVersionAllNamespace
+func (c *Current) InitVersions(resourceVersionOfInvolvedNS string, resourceVersionAllNamespace string) {
+	c.resourceVersionOfInvolvedNS = resourceVersionOfInvolvedNS
+	c.resourceVersionOfAllNS = resourceVersionAllNamespace
 }
 
 // SetSelectedRadio set which radio selected now
@@ -194,8 +187,6 @@ func (c *Current) SetSelectedRadio(currentRadio FocusOn) {
 	switch currentRadio {
 	case FocusOnInvolved:
 		c.visitedSet = c.visitedRows01
-	case FocusOnCurrentNamespace:
-		c.visitedSet = c.visitedRows02
 	case FocusOnAllNamespace:
 		c.visitedSet = c.visitedRows03
 	}
@@ -226,9 +217,6 @@ func (c *Current) MoveEach() {
 	case FocusOnInvolved:
 		c.visitedRows01 = mapset.NewSet(rows...)
 		c.visitedSet = c.visitedRows01
-	case FocusOnCurrentNamespace:
-		c.visitedRows02 = mapset.NewSet(rows...)
-		c.visitedSet = c.visitedRows02
 	case FocusOnAllNamespace:
 		c.visitedRows03 = mapset.NewSet(rows...)
 		c.visitedSet = c.visitedRows03

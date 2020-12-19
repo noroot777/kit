@@ -62,6 +62,7 @@ func newOptions(namespace string, clientSet *kubernetes.Clientset) *Options {
 
 // HandleInfo handle with the execed info
 func HandleInfo(info *resource.Info) {
+	curr.AddNamespace(info.Namespace)
 	metaObj := info.Object.(*unstructured.Unstructured)
 	opts.involvedObjects[metaObj.GetName()] = info
 	// TODO print a message to activity view. 根据不同的命令打印不同内容，eg: apply(delete/create) imds/Deployment/imds-web
@@ -152,14 +153,10 @@ func createView() {
 	frmRadio.SetAlign(ui.AlignRight)
 	// radio group to select related namespace or objects
 	radioGroup := ui.CreateRadioGroup()
-	radioCR := ui.CreateRadio(frmRadio, ui.AutoSize, "Involved objects", 1)
-	radioCR.SetSelected(false)
+	radioCR := ui.CreateRadio(frmRadio, ui.AutoSize, "Involved namespaces", 1)
+	radioCR.SetSelected(true)
 	radioCR.SetActive(false)
 	radioGroup.AddItem(radioCR)
-	radioCN := ui.CreateRadio(frmRadio, ui.AutoSize, "Current namespace", 1)
-	radioCN.SetSelected(true)
-	radioCN.SetActive(false)
-	radioGroup.AddItem(radioCN)
 	radioAN := ui.CreateRadio(frmRadio, ui.AutoSize, "All namespaces", 1)
 	radioAN.SetSelected(false)
 	radioAN.SetActive(false)
@@ -179,7 +176,7 @@ func createView() {
 		{Title: "REASON", Width: 20, Alignment: ui.AlignLeft},
 		{Title: "OBJECT", Width: 30, Alignment: ui.AlignLeft},
 		{Title: "MESSAGE", Width: 100, Alignment: ui.AlignLeft},
-		{Title: "NAME", Width: 30, Alignment: ui.AlignLeft},
+		{Title: "NAMESPACE", Width: 10, Alignment: ui.AlignLeft},
 	}
 	tabEvents.SetColumns(cols)
 	tabEvents.SetRowCount(0)
@@ -227,6 +224,10 @@ func createView() {
 			}
 		case termbox.KeyCtrlQ, termbox.KeyEsc:
 			ui.PutEvent(ui.Event{Type: ui.EventCloseWindow})
+		case 0x3F: // key:?
+			ui.PutEvent(ui.Event{Type: ui.EventCloseWindow})
+		default:
+			fmt.Printf("%+v", e.Key)
 		}
 		return true
 	}, inputEscMode)
@@ -260,21 +261,7 @@ func createView() {
 					info.Text = event.Message
 				}
 			case 6:
-				if curr.SelectedRadio() == FocusOnAllNamespace {
-					col := tabEvents.Columns()[6]
-					col.Title = "NAMESPACE"
-					tabEvents.SetColumnInfo(6, col)
-					info.Text = event.Namespace
-				} else {
-					col := tabEvents.Columns()[6]
-					col.Title = "NAME"
-					tabEvents.SetColumnInfo(6, col)
-					if len(event.Name) >= 30 {
-						info.Text = event.Name[:27] + ".. "
-					} else {
-						info.Text = event.Name
-					}
-				}
+				info.Text = event.Namespace
 			}
 			// set visited row's bg color
 			if curr.VisitedSet().Contains(info.Row) {
@@ -316,8 +303,6 @@ func createView() {
 		case 0:
 			changeRadioFocus(FocusOnInvolved, tabEvents)
 		case 1:
-			changeRadioFocus(FocusOnCurrentNamespace, tabEvents)
-		case 2:
 			changeRadioFocus(FocusOnAllNamespace, tabEvents)
 		case -1:
 			return
@@ -339,10 +324,19 @@ func createView() {
 				if !ok {
 					continue
 				}
+
 				// mtx.Lock()
 				switch e.Object.(type) {
 				case *corev1.Event:
 					event := e.Object.(*corev1.Event)
+
+					// filter event by namespace manually
+					ns, isAll := curr.Namespace()
+					if !isAll {
+						if !ns.Contains(event.Namespace) {
+							continue
+						}
+					}
 
 					activities(event, opts, curr)
 
@@ -410,7 +404,6 @@ func changeRadioFocus(f FocusOn, tabEvents *ui.TableView) {
 	opts.watcher.Stop()
 
 	curr.SetSelectedRadio(f)
-	curr.SetNamespace(opts.Namespace)
 	tabEvents.SetRowCount(len(curr.Events()))
 	tabEvents.Draw()
 
@@ -420,9 +413,9 @@ func changeRadioFocus(f FocusOn, tabEvents *ui.TableView) {
 // can not use informer, bcz `410 Gone` happened
 func watchEvents() {
 	version := curr.Version()
-	ns := curr.Namespace()
 	listOpt := metav1.ListOptions{ResourceVersion: version, ResourceVersionMatch: metav1.ResourceVersionMatchNotOlderThan}
-	watcher, err := opts.ClientSet.CoreV1().Events(ns).Watch(context.TODO(), listOpt)
+	// watch event all namespaces, and filter event by namespace manually when read the watcher chan
+	watcher, err := opts.ClientSet.CoreV1().Events("").Watch(context.TODO(), listOpt)
 	if err != nil {
 		opts.errorWriter.Write([]byte(err.Error()))
 	}
@@ -430,18 +423,9 @@ func watchEvents() {
 }
 
 func initResourceVersion() error {
-	var latest, latestAllNamespace int
+	var latestAllNamespace int
 
-	eventList, err := opts.ClientSet.CoreV1().Events(opts.Namespace).List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-	latest, err = latestVersion(eventList.Items)
-	if err != nil {
-		return err
-	}
-
-	eventList, err = opts.ClientSet.CoreV1().Events("").List(context.TODO(), metav1.ListOptions{})
+	eventList, err := opts.ClientSet.CoreV1().Events("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -450,7 +434,7 @@ func initResourceVersion() error {
 		return err
 	}
 
-	curr.InitVersions(strconv.Itoa(latest), strconv.Itoa(latestAllNamespace))
+	curr.InitVersions(strconv.Itoa(latestAllNamespace), strconv.Itoa(latestAllNamespace))
 	return nil
 }
 
