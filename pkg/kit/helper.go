@@ -91,7 +91,7 @@ type Current struct {
 	resourceVersionOfInvolvedNS, resourceVersionOfAllNS string
 
 	// involved namespace set
-	namespace mapset.Set
+	involvedNamespaces mapset.Set
 
 	// event names that kit recorded in Activity Window
 	recordedEvents mapset.Set
@@ -101,9 +101,9 @@ type Current struct {
 func NewCurrent() *Current {
 	curr := &Current{
 		// row numbers map of visited
-		visitedRows01: mapset.NewSet(),
-		visitedRows03: mapset.NewSet(),
-		namespace:     mapset.NewSet(),
+		visitedRows01:      mapset.NewSet(),
+		visitedRows03:      mapset.NewSet(),
+		involvedNamespaces: mapset.NewSet(),
 	}
 	// default selected radio is No.1
 	curr.SetSelectedRadio(FocusOnInvolved)
@@ -160,14 +160,14 @@ func (c *Current) Version() string {
 
 // AddNamespace set the namespace
 func (c *Current) AddNamespace(ns string) {
-	curr.namespace.Add(ns)
+	curr.involvedNamespaces.Add(ns)
 }
 
 // Namespace return the namespace and isall flag
 func (c *Current) Namespace() (mapset.Set, bool) {
 	switch c.selectedRadio {
 	case FocusOnInvolved:
-		return curr.namespace, false
+		return curr.involvedNamespaces, false
 	case FocusOnAllNamespace:
 		return nil, true
 	}

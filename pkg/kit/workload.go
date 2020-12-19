@@ -9,6 +9,7 @@ package kit
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1beta1 "k8s.io/api/apps/v1beta1"
 	appsv1beta2 "k8s.io/api/apps/v1beta2"
@@ -36,6 +37,8 @@ import (
 // 1. watch得到event后，根据其involvedObject向上追溯，是否与传入的map相关
 // 2. 若相关，且map中无此object，则将involvedObject存入map，并做相应展示
 // 3. 若不相关，则放弃
+
+var activityChan chan struct{} = make(chan struct{})
 
 func activities(event *corev1.Event, opts *Options, curr *Current) {
 	if curr.recordedEvents.Contains(event.Name) {
@@ -80,14 +83,23 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 			if metav1.IsControlledBy(pod, metaObj) {
 				opts.involvedObjects[eventInvolvedName] = &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}
 
-				s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
-				opts.writer.Write([]byte(s))
+				// s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
+				// opts.writer.Write([]byte(s))
 				curr.recordedEvents.Add(event.Name)
+
+				opts.activities[eventInvolvedName] = &Activity{Obj: &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}, Message: []Message{}}
+				appendMessage(opts.activities[eventInvolvedName], event.Reason, event.CreationTimestamp.Time)
+				activityChan <- struct{}{}
+
 				return
 			} else if string(pod.UID) == string(metaObj.GetUID()) {
-				s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
-				opts.writer.Write([]byte(s))
+				// s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
+				// opts.writer.Write([]byte(s))
 				curr.recordedEvents.Add(event.Name)
+
+				appendMessage(opts.activities[eventInvolvedName], event.Reason, event.CreationTimestamp.Time)
+				activityChan <- struct{}{}
+
 				return
 			}
 		} else if eventInvolvedKind == "ReplicaSet" && kind == "Deployment" {
@@ -100,13 +112,23 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 			if metav1.IsControlledBy(rs, switch2Object(v.Object)) {
 				opts.involvedObjects[eventInvolvedName] = &resource.Info{Object: rs, Namespace: eventInvolvedNamespace}
 
-				s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
-				opts.writer.Write([]byte(s))
+				// s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
+				// opts.writer.Write([]byte(s))
 				curr.recordedEvents.Add(event.Name)
+
+				opts.activities[eventInvolvedName] = &Activity{Obj: &resource.Info{Object: rs, Namespace: eventInvolvedNamespace}, Message: []Message{}}
+				appendMessage(opts.activities[eventInvolvedName], event.Reason, event.CreationTimestamp.Time)
+				activityChan <- struct{}{}
+
 				return
 			}
 		}
 	}
+}
+
+func appendMessage(act *Activity, info string, when time.Time) {
+	msg := Message{Info: info, When: when}
+	act.Message = append(act.Message, msg)
 }
 
 func switch2Object(obj runtime.Object) metav1.Object {

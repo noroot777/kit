@@ -27,8 +27,6 @@ var (
 	Errors []error
 	// values lock
 	mtx sync.RWMutex
-	// count of Event table(include the NO. column)
-	// columnCount = 6
 	// to keep current status
 	curr *Current
 	// options
@@ -41,6 +39,7 @@ type Options struct {
 	ActivityWindow *ui.TextView
 
 	involvedObjects map[string]*resource.Info
+	activities      map[string]*Activity
 
 	writer      *UIWriter
 	errorWriter *UIWriter
@@ -52,6 +51,7 @@ func newOptions(clientSet *kubernetes.Clientset) *Options {
 	o := &Options{
 		ClientSet:       clientSet,
 		involvedObjects: make(map[string]*resource.Info),
+		activities:      make(map[string]*Activity),
 	}
 	return o
 }
@@ -61,6 +61,7 @@ func HandleInfo(info *resource.Info) {
 	curr.AddNamespace(info.Namespace)
 	metaObj := info.Object.(*unstructured.Unstructured)
 	opts.involvedObjects[metaObj.GetName()] = info
+	opts.activities[metaObj.GetName()] = &Activity{Obj: info, Message: []Message{}}
 	// TODO print a message to activity view. 根据不同的命令打印不同内容，eg: apply(delete/create) imds/Deployment/imds-web
 	// opts.writer.Write([]byte(fmt.Sprintf("apply %v/%v/%v", metaObj.GetNamespace(), info.Mapping.GroupVersionKind.Kind, metaObj.GetName())))
 }
@@ -81,7 +82,7 @@ func Intercept(fn InterceptFunc, clientSet *kubernetes.Clientset) (out io.Writer
 
 	drawUI()
 
-	opts.writer = NewUIWriter(opts.ActivityWindow)
+	opts.writer = NewNormalUIWriter(opts.ActivityWindow)
 	out = opts.writer
 	opts.errorWriter = NewUIErrorWriter(opts.ActivityWindow)
 	errorOut = opts.errorWriter
@@ -302,6 +303,25 @@ func createView() {
 		}
 		txtEvent.SetText([]string{""})
 	})
+
+	go func() {
+		for {
+			select {
+			case <-activityChan:
+				opts.ActivityWindow.SetText([]string{""})
+				for k, v := range opts.activities {
+					s := fmt.Sprintf("%v/%v %v", "", k, "...")
+					opts.writer.Write([]byte(s))
+					for _, msg := range v.Message {
+						s := fmt.Sprintf("  | %v", msg.Info)
+						opts.writer.Write([]byte(s))
+					}
+				}
+			default:
+				continue
+			}
+		}
+	}()
 
 	// ******************************************************
 	// * 3. catch the events from k8s and show in tabEvents *
