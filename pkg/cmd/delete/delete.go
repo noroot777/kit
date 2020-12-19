@@ -146,9 +146,9 @@ func NewCmdDelete(f cmdutil.Factory, streams genericclioptions.IOStreams) *cobra
 			// add by kit
 			clientSet, e := f.KubernetesClientSet()
 			cmdutil.CheckErr(e)
-			cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
-			cmdutil.CheckErr(e)
-			o.Out, o.ErrOut = kit.Intercept(kit.InterceptDelete, cmdNamespace, clientSet)
+			// cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
+			// cmdutil.CheckErr(e)
+			o.Out, o.ErrOut = kit.Intercept(kit.InterceptDelete, clientSet)
 
 			cmdutil.CheckErr(o.Complete(f, args, cmd))
 			cmdutil.CheckErr(o.Validate())

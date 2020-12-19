@@ -180,9 +180,7 @@ func NewCmdApply(baseName string, f cmdutil.Factory, ioStreams genericclioptions
 			// add by kit
 			clientSet, e := f.KubernetesClientSet()
 			cmdutil.CheckErr(e)
-			cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
-			cmdutil.CheckErr(e)
-			o.Out, o.ErrOut = kit.Intercept(kit.InterceptApply, cmdNamespace, clientSet)
+			o.Out, o.ErrOut = kit.Intercept(kit.InterceptApply, clientSet)
 
 			cmdutil.CheckErr(o.Complete(f, cmd))
 			cmdutil.CheckErr(validateArgs(cmd, args))

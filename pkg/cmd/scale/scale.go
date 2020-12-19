@@ -119,9 +119,7 @@ func NewCmdScale(f cmdutil.Factory, ioStreams genericclioptions.IOStreams) *cobr
 			// add by kit
 			clientSet, e := f.KubernetesClientSet()
 			cmdutil.CheckErr(e)
-			cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
-			cmdutil.CheckErr(e)
-			o.Out, o.ErrOut = kit.Intercept(nil, cmdNamespace, clientSet)
+			o.Out, o.ErrOut = kit.Intercept(nil, clientSet)
 
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Validate(cmd))

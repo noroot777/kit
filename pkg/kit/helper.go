@@ -98,7 +98,7 @@ type Current struct {
 }
 
 // NewCurrent creates a new Current
-func NewCurrent(ns string) *Current {
+func NewCurrent() *Current {
 	curr := &Current{
 		// row numbers map of visited
 		visitedRows01: mapset.NewSet(),
@@ -107,7 +107,7 @@ func NewCurrent(ns string) *Current {
 	}
 	// default selected radio is No.1
 	curr.SetSelectedRadio(FocusOnInvolved)
-	curr.namespace.Add(ns)
+	// curr.namespace.Add(ns)
 	curr.recordedEvents = mapset.NewSet()
 	return curr
 }
