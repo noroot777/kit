@@ -9,7 +9,7 @@ package kit
 import (
 	"context"
 	"fmt"
-	"time"
+	"strings"
 
 	appsv1beta1 "k8s.io/api/apps/v1beta1"
 	appsv1beta2 "k8s.io/api/apps/v1beta2"
@@ -38,100 +38,6 @@ import (
 // 2. 若相关，且map中无此object，则将involvedObject存入map，并做相应展示
 // 3. 若不相关，则放弃
 
-func activities1(event *corev1.Event, opts *Options, curr *Current) {
-	if curr.recordedEvents.Contains(event.Name) {
-		return
-	}
-
-	eventInvolvedName := event.InvolvedObject.Name
-	eventInvolvedNamespace := event.InvolvedObject.Namespace
-	eventInvolvedKind := event.InvolvedObject.Kind
-
-	// opts.writer.Write([]byte(fmt.Sprintf("name: %v, kind: %v\n", eventInvolvedName, eventInvolvedKind)))
-
-	// if the involved obj of event was containes in the map, show message in the Activity View.
-	involvedObj := opts.involvedObjects[eventInvolvedName]
-	if involvedObj != nil {
-		// 在event list中展示
-		// 在活动list中展示
-		if event.Type != corev1.EventTypeNormal {
-			// 展示错误
-			s := fmt.Sprintf(" ✖️   %v/%v/%v", event.Reason, event.InvolvedObject.Kind, eventInvolvedName)
-			opts.writer.Write([]byte(s))
-			return
-		}
-	}
-
-	// TODO if event.InvolvedObject.Kind not in workload range, return
-
-	for _, v := range opts.involvedObjects {
-		if eventInvolvedNamespace != v.Namespace {
-			continue
-		}
-
-		kind := v.Object.GetObjectKind().GroupVersionKind().Kind
-		if eventInvolvedKind == "Pod" && kind != "Deployment" {
-			pod, err := opts.ClientSet.CoreV1().Pods(eventInvolvedNamespace).Get(context.TODO(), eventInvolvedName, metav1.GetOptions{})
-			if err != nil || pod == nil {
-				// 展示错误？
-				continue
-			}
-
-			metaObj := switch2Object(v.Object)
-			opts.ActivityWindow.AddText([]string{"---"})
-			opts.writer.Write([]byte(fmt.Sprintf("  -- <debug>0 goid:%v; podid:%v metaid:%v", GoID(), pod.Name, metaObj.GetName())))
-			// opts.writer.Write([]byte(fmt.Sprintf("  -- <debug>0.1 goid:%v; isCtrl:%v isEqual:%v", GoID(), metav1.IsControlledBy(pod, metaObj), string(pod.UID) == string(metaObj.GetUID()))))
-			if metav1.IsControlledBy(pod, metaObj) {
-				opts.involvedObjects[eventInvolvedName] = &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}
-
-				// s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
-				// opts.writer.Write([]byte(s))
-				curr.recordedEvents.Add(event.Name)
-
-				opts.activities[eventInvolvedName] = &Activity{Obj: &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}, Message: []Message{}}
-				appendMessage(opts.activities[eventInvolvedName], event.Reason, event.CreationTimestamp.Time)
-				showActivites(opts)
-				opts.writer.Write([]byte(fmt.Sprintf("  -- <debug>1")))
-				// opts.writer.Write([]byte(fmt.Sprintf("  -- <debug>1 goid:%v; %v's len:%v", GoID(), eventInvolvedName, len(opts.activities[eventInvolvedName].Message))))
-
-				return
-			} else if string(pod.UID) == string(metaObj.GetUID()) {
-				// s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
-				// opts.writer.Write([]byte(s))
-				curr.recordedEvents.Add(event.Name)
-
-				appendMessage(opts.activities[eventInvolvedName], event.Reason, event.CreationTimestamp.Time)
-				showActivites(opts)
-				opts.writer.Write([]byte(fmt.Sprintf("  -- <debug>2")))
-				// opts.writer.Write([]byte(fmt.Sprintf("  -- <debug>2 goid:%v; %v's len:%v", GoID(), eventInvolvedName, len(opts.activities[eventInvolvedName].Message))))
-
-				return
-			}
-		} else if eventInvolvedKind == "ReplicaSet" && kind == "Deployment" {
-			rs, err := opts.ClientSet.AppsV1().ReplicaSets(eventInvolvedNamespace).Get(context.TODO(), eventInvolvedName, metav1.GetOptions{})
-			if err != nil || rs == nil {
-				// 展示错误？
-				continue
-			}
-
-			if metav1.IsControlledBy(rs, switch2Object(v.Object)) {
-				opts.involvedObjects[eventInvolvedName] = &resource.Info{Object: rs, Namespace: eventInvolvedNamespace}
-
-				// s := fmt.Sprintf("%v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)
-				// opts.writer.Write([]byte(s))
-				curr.recordedEvents.Add(event.Name)
-
-				opts.activities[eventInvolvedName] = &Activity{Obj: &resource.Info{Object: rs, Namespace: eventInvolvedNamespace}, Message: []Message{}}
-				appendMessage(opts.activities[eventInvolvedName], event.Reason, event.CreationTimestamp.Time)
-				showActivites(opts)
-				// opts.writer.Write([]byte(fmt.Sprintf("  -- <debug>3 goid:%v; %v's len:%v", GoID(), eventInvolvedName, len(opts.activities[eventInvolvedName].Message))))
-
-				return
-			}
-		}
-	}
-}
-
 func activities(event *corev1.Event, opts *Options, curr *Current) {
 	if curr.recordedEvents.Contains(event.Name) {
 		return
@@ -140,7 +46,9 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 	eventInvolvedName := event.InvolvedObject.Name
 	eventInvolvedNamespace := event.InvolvedObject.Namespace
 	eventInvolvedKind := event.InvolvedObject.Kind
+	kindName := eventInvolvedKind + "/" + eventInvolvedName
 
+	// opts.writer.Write([]byte(fmt.Sprintf("<debug> Reason: %v %v", eventInvolvedKind, event.Reason)))
 	// opts.writer.Write([]byte(fmt.Sprintf("name: %v, kind: %v\n", eventInvolvedName, eventInvolvedKind)))
 
 	// if the involved obj of event was containes in the map, show message in the Activity View.
@@ -158,14 +66,15 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 
 	// TODO if event.InvolvedObject.Kind not in workload range, return
 
-	for _, v := range opts.involvedObjects {
+	for k, v := range opts.involvedObjects {
 		if eventInvolvedNamespace != v.Namespace {
 			continue
 		}
+		// opts.writer.Write([]byte(fmt.Sprintf("%v", "---")))
 
-		kind := v.Object.GetObjectKind().GroupVersionKind().Kind
+		kind := strings.Split(k, "/")[0]
 
-		opts.writer.Write([]byte(fmt.Sprintf("<debug 03.2> ekind: %v, kind: %v\n", eventInvolvedKind, kind)))
+		// opts.writer.Write([]byte(fmt.Sprintf("<debug 03.3> ekind: %v, kind: %v\n", eventInvolvedKind, kind)))
 
 		if eventInvolvedKind == "Pod" {
 			pod, err := opts.ClientSet.CoreV1().Pods(eventInvolvedNamespace).Get(context.TODO(), eventInvolvedName, metav1.GetOptions{})
@@ -177,33 +86,36 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 
 			if kind == "ReplicaSet" {
 				if metav1.IsControlledBy(pod, metaObj) {
-					opts.involvedObjects[eventInvolvedName] = &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}
+					opts.involvedObjects[kindName] = &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}
 
-					opts.writer.Write([]byte(fmt.Sprintf("1 %v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)))
+					// opts.writer.Write([]byte(fmt.Sprintf("<debug> 1")))
 					curr.recordedEvents.Add(event.Name)
 
-					opts.activities[eventInvolvedName] = &Activity{Obj: &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}, Message: []Message{}}
-					appendMessage(opts.activities[eventInvolvedName], event.Reason, event.CreationTimestamp.Time)
+					if opts.activities[kindName] == nil {
+						opts.activities[kindName] = &Activity{Obj: &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}, Message: []Message{}}
+					}
+					opts.activities[kindName].AddMessage(Message{Info: event.Reason, When: event.CreationTimestamp.Time})
 					showActivites(opts)
 					// opts.writer.Write([]byte(fmt.Sprintf("  -- <debug>1")))
 					// opts.writer.Write([]byte(fmt.Sprintf("  -- <debug>1 goid:%v; %v's len:%v", GoID(), eventInvolvedName, len(opts.activities[eventInvolvedName].Message))))
 
-					return
+					// return
 				}
 			} else if kind == "Pod" {
 				if string(pod.UID) == string(metaObj.GetUID()) {
-					opts.writer.Write([]byte(fmt.Sprintf("2 %v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)))
+					// opts.writer.Write([]byte(fmt.Sprintf("<debug> 2")))
 
-					opts.involvedObjects[eventInvolvedName] = &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}
+					// opts.involvedObjects[kindName] = &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}
 
 					curr.recordedEvents.Add(event.Name)
 
-					appendMessage(opts.activities[eventInvolvedName], event.Reason, event.CreationTimestamp.Time)
-					showActivites(opts)
+					// opts.activities[kindName].AddMessage(Message{Info: event.Reason, When: event.CreationTimestamp.Time})
+					// showActivites(opts)
+
 					// opts.writer.Write([]byte(fmt.Sprintf("  -- <debug>2")))
 					// opts.writer.Write([]byte(fmt.Sprintf("  -- <debug>2 goid:%v; %v's len:%v", GoID(), eventInvolvedName, len(opts.activities[eventInvolvedName].Message))))
 
-					return
+					// return
 				}
 			}
 		} else if eventInvolvedKind == "ReplicaSet" {
@@ -215,18 +127,20 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 				}
 
 				if metav1.IsControlledBy(rs, switch2Object(v.Object)) {
-					opts.involvedObjects[eventInvolvedName] = &resource.Info{Object: rs, Namespace: eventInvolvedNamespace}
+					opts.involvedObjects[kindName] = &resource.Info{Object: rs, Namespace: eventInvolvedNamespace}
 
-					opts.writer.Write([]byte(fmt.Sprintf("3 %v/%v %v", eventInvolvedKind, eventInvolvedName, event.Reason)))
+					// opts.writer.Write([]byte(fmt.Sprintf("<debug> 3")))
 
 					curr.recordedEvents.Add(event.Name)
 
-					opts.activities[eventInvolvedName] = &Activity{Obj: &resource.Info{Object: rs, Namespace: eventInvolvedNamespace}, Message: []Message{}}
-					appendMessage(opts.activities[eventInvolvedName], event.Reason, event.CreationTimestamp.Time)
+					if opts.activities[kindName] == nil {
+						opts.activities[kindName] = &Activity{Obj: &resource.Info{Object: rs, Namespace: eventInvolvedNamespace}, Message: []Message{}}
+					}
+					opts.activities[kindName].AddMessage(Message{Info: event.Reason, When: event.CreationTimestamp.Time})
 					showActivites(opts)
 					// opts.writer.Write([]byte(fmt.Sprintf("  -- <debug>3 goid:%v; %v's len:%v", GoID(), eventInvolvedName, len(opts.activities[eventInvolvedName].Message))))
 
-					return
+					// return
 				}
 			}
 		}
@@ -234,19 +148,15 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 }
 
 func showActivites(opts *Options) {
+	opts.ActivityWindow.SetText([]string{""})
 	for k, v := range opts.activities {
-		s := fmt.Sprintf("%v/%v %v", "", k, "...")
+		s := fmt.Sprintf("%v %v", k, "...")
 		opts.writer.Write([]byte(s))
 		for _, msg := range v.Message {
 			s := fmt.Sprintf("  | %v", msg.Info)
 			opts.writer.Write([]byte(s))
 		}
 	}
-}
-
-func appendMessage(act *Activity, info string, when time.Time) {
-	msg := Message{Info: info, When: when}
-	act.Message = append(act.Message, msg)
 }
 
 func switch2Object(obj runtime.Object) metav1.Object {

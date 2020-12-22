@@ -60,7 +60,7 @@ func newOptions(clientSet *kubernetes.Clientset) *Options {
 func HandleInfo(info *resource.Info) {
 	curr.AddNamespace(info.Namespace)
 	metaObj := info.Object.(*unstructured.Unstructured)
-	opts.involvedObjects[metaObj.GetName()] = info
+	opts.involvedObjects[info.Object.GetObjectKind().GroupVersionKind().Kind+"/"+metaObj.GetName()] = info
 	opts.activities[metaObj.GetName()] = &Activity{Obj: info, Message: []Message{}}
 	// TODO print a message to activity view. 根据不同的命令打印不同内容，eg: apply(delete/create) imds/Deployment/imds-web
 	// opts.writer.Write([]byte(fmt.Sprintf("apply %v/%v/%v", metaObj.GetNamespace(), info.Mapping.GroupVersionKind.Kind, metaObj.GetName())))

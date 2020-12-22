@@ -17,3 +17,8 @@ type Message struct {
 	Info string
 	When time.Time
 }
+
+// AddMessage AddMessage
+func (t *Activity) AddMessage(m Message) {
+	t.Message = append(t.Message, m)
+}
