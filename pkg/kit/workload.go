@@ -23,7 +23,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/cli-runtime/pkg/resource"
 	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
@@ -67,7 +66,7 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 	// TODO if event.InvolvedObject.Kind not in workload range, return
 
 	for k, v := range opts.involvedObjects {
-		if eventInvolvedNamespace != v.Namespace {
+		if eventInvolvedNamespace != v.GetNamespace() {
 			continue
 		}
 		// opts.writer.Write([]byte(fmt.Sprintf("%v", "---")))
@@ -82,17 +81,17 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 				// 展示错误？
 				continue
 			}
-			metaObj := switch2Object(v.Object)
 
 			if kind == "ReplicaSet" {
-				if metav1.IsControlledBy(pod, metaObj) {
-					opts.involvedObjects[kindName] = &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}
+				if metav1.IsControlledBy(pod, v) {
+					// opts.involvedObjects[kindName] = &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}
+					opts.involvedObjects[kindName] = pod
 
-					// opts.writer.Write([]byte(fmt.Sprintf("<debug> 1")))
+					opts.writer.Write([]byte(fmt.Sprintf("<debug> 1")))
 					curr.recordedEvents.Add(event.Name)
 
 					if opts.activities[kindName] == nil {
-						opts.activities[kindName] = &Activity{Obj: &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}, Message: []Message{}}
+						opts.activities[kindName] = &Activity{Obj: pod, Message: []Message{}}
 					}
 					opts.activities[kindName].AddMessage(Message{Info: event.Reason, When: event.CreationTimestamp.Time})
 					showActivites(opts)
@@ -102,7 +101,7 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 					// return
 				}
 			} else if kind == "Pod" {
-				if string(pod.UID) == string(metaObj.GetUID()) {
+				if string(pod.UID) == string(v.GetUID()) {
 					// opts.writer.Write([]byte(fmt.Sprintf("<debug> 2")))
 
 					// opts.involvedObjects[kindName] = &resource.Info{Object: pod, Namespace: eventInvolvedNamespace}
@@ -126,15 +125,15 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 					continue
 				}
 
-				if metav1.IsControlledBy(rs, switch2Object(v.Object)) {
-					opts.involvedObjects[kindName] = &resource.Info{Object: rs, Namespace: eventInvolvedNamespace}
+				if metav1.IsControlledBy(rs, v) {
+					opts.involvedObjects[kindName] = rs
 
 					// opts.writer.Write([]byte(fmt.Sprintf("<debug> 3")))
 
 					curr.recordedEvents.Add(event.Name)
 
 					if opts.activities[kindName] == nil {
-						opts.activities[kindName] = &Activity{Obj: &resource.Info{Object: rs, Namespace: eventInvolvedNamespace}, Message: []Message{}}
+						opts.activities[kindName] = &Activity{Obj: rs, Message: []Message{}}
 					}
 					opts.activities[kindName].AddMessage(Message{Info: event.Reason, When: event.CreationTimestamp.Time})
 					showActivites(opts)
@@ -143,18 +142,6 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 					// return
 				}
 			}
-		}
-	}
-}
-
-func showActivites(opts *Options) {
-	opts.ActivityWindow.SetText([]string{""})
-	for k, v := range opts.activities {
-		s := fmt.Sprintf("%v %v", k, "...")
-		opts.writer.Write([]byte(s))
-		for _, msg := range v.Message {
-			s := fmt.Sprintf("  | %v", msg.Info)
-			opts.writer.Write([]byte(s))
 		}
 	}
 }
@@ -225,6 +212,18 @@ func switch2ObjectMeta(obj runtime.Object) *metav1.ObjectMeta {
 	default:
 		// "no match type for %T", t
 		return nil
+	}
+}
+
+func showActivites(opts *Options) {
+	opts.ActivityWindow.SetText([]string{""})
+	for k, v := range opts.activities {
+		s := fmt.Sprintf("%v %v", k, "...")
+		opts.writer.Write([]byte(s))
+		for _, msg := range v.Message {
+			s := fmt.Sprintf("  | %v", msg.Info)
+			opts.writer.Write([]byte(s))
+		}
 	}
 }
 

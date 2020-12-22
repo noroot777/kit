@@ -3,12 +3,12 @@ package kit
 import (
 	"time"
 
-	"k8s.io/cli-runtime/pkg/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Activity Activity
 type Activity struct {
-	Obj     *resource.Info
+	Obj     metav1.Object
 	Message []Message
 }
 
