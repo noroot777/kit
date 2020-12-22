@@ -1,7 +1,11 @@
 package kit
 
 import (
+	"fmt"
 	"reflect"
+	"runtime"
+	"strconv"
+	"strings"
 
 	mapset "github.com/deckarep/golang-set"
 	ui "github.com/noroot777/clui"
@@ -221,4 +225,16 @@ func (c *Current) MoveEach() {
 		c.visitedRows03 = mapset.NewSet(rows...)
 		c.visitedSet = c.visitedRows03
 	}
+}
+
+// GoID GoID
+func GoID() int {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	idField := strings.Fields(strings.TrimPrefix(string(buf[:n]), "goroutine "))[0]
+	id, err := strconv.Atoi(idField)
+	if err != nil {
+		panic(fmt.Sprintf("cannot get goroutine id: %v", err))
+	}
+	return id
 }

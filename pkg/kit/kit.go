@@ -304,25 +304,6 @@ func createView() {
 		txtEvent.SetText([]string{""})
 	})
 
-	go func() {
-		for {
-			select {
-			case <-activityChan:
-				opts.ActivityWindow.SetText([]string{""})
-				for k, v := range opts.activities {
-					s := fmt.Sprintf("%v/%v %v", "", k, "...")
-					opts.writer.Write([]byte(s))
-					for _, msg := range v.Message {
-						s := fmt.Sprintf("  | %v", msg.Info)
-						opts.writer.Write([]byte(s))
-					}
-				}
-			default:
-				continue
-			}
-		}
-	}()
-
 	// ******************************************************
 	// * 3. catch the events from k8s and show in tabEvents *
 	// ******************************************************
