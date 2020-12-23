@@ -39,7 +39,7 @@ type Options struct {
 	ActivityWindow *ui.TextView
 
 	involvedObjects map[string]metav1.Object
-	activities      map[string]*Activity
+	activities      Activities
 
 	writer      *UIWriter
 	errorWriter *UIWriter
@@ -51,7 +51,7 @@ func newOptions(clientSet *kubernetes.Clientset) *Options {
 	o := &Options{
 		ClientSet:       clientSet,
 		involvedObjects: make(map[string]metav1.Object),
-		activities:      make(map[string]*Activity),
+		activities:      []*Activity{},
 	}
 	return o
 }
@@ -60,8 +60,9 @@ func newOptions(clientSet *kubernetes.Clientset) *Options {
 func HandleInfo(info *resource.Info) {
 	curr.AddNamespace(info.Namespace)
 	metaObj := info.Object.(*unstructured.Unstructured)
-	opts.involvedObjects[info.Object.GetObjectKind().GroupVersionKind().Kind+"/"+metaObj.GetName()] = metaObj
-	opts.activities[metaObj.GetName()] = &Activity{Obj: switch2Object(info.Object), Message: []Message{}}
+	kn := info.Object.GetObjectKind().GroupVersionKind().Kind + "/" + metaObj.GetName()
+	opts.involvedObjects[kn] = metaObj
+	opts.activities.New(kn)
 	// TODO print a message to activity view. 根据不同的命令打印不同内容，eg: apply(delete/create) imds/Deployment/imds-web
 	// opts.writer.Write([]byte(fmt.Sprintf("apply %v/%v/%v", metaObj.GetNamespace(), info.Mapping.GroupVersionKind.Kind, metaObj.GetName())))
 }
