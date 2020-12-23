@@ -202,3 +202,17 @@ func getControlleePods(owner metav1.Object, c coreclient.CoreV1Interface) ([]cor
 	}
 	return allPods, err
 }
+
+func syncStatus(obj runtime.Object) {
+	switch obj.(type) {
+	case *corev1.Pod:
+		t := obj.(*corev1.Pod)
+		if t.Status.Conditions[0].Status == corev1.ConditionTrue {
+		}
+	case *corev1.ReplicationController:
+		t := obj.(*corev1.ReplicationController)
+		if t.Status.Conditions[0].Status == corev1.ConditionTrue {
+		}
+
+	}
+}
