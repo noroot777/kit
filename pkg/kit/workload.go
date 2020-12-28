@@ -125,17 +125,17 @@ func checkComplete(act *Activity) {
 	switch t := obj.(type) {
 
 	// Pod
+	// when
+	// Status:         Running
 	case *corev1.Pod:
-		// when
-		// Status:         Running
 		if t.Status.Phase == corev1.PodRunning {
 			opts.activities.Get(kn).Complete = true
 		}
 
 		// ReplicationController
-	case *corev1.ReplicationController:
 		// when
 		// Replicas:       1 current / 1 desired
+	case *corev1.ReplicationController:
 		if *t.Spec.Replicas == t.Status.AvailableReplicas {
 			opts.activities.Get(kn).Complete = true
 		}
@@ -176,20 +176,19 @@ func checkComplete(act *Activity) {
 		}
 
 		// ReplicaSet
+		// when
+		// Replicas:       1 current / 1 desired
 	case *extensionsv1beta1.ReplicaSet:
-		if len(t.Status.Conditions) > 0 && t.Status.Conditions[0].Status == corev1.ConditionTrue {
-			key := t.Kind + t.Name
-			opts.activities.Get(key).Complete = true
+		if *t.Spec.Replicas == t.Status.AvailableReplicas {
+			opts.activities.Get(kn).Complete = true
 		}
 	case *appsv1beta2.ReplicaSet:
-		if len(t.Status.Conditions) > 0 && t.Status.Conditions[0].Status == corev1.ConditionTrue {
-			key := t.Kind + t.Name
-			opts.activities.Get(key).Complete = true
+		if *t.Spec.Replicas == t.Status.AvailableReplicas {
+			opts.activities.Get(kn).Complete = true
 		}
 	case *appsv1.ReplicaSet:
-		if len(t.Status.Conditions) > 0 && t.Status.Conditions[0].Status == corev1.ConditionTrue {
-			key := t.Kind + t.Name
-			opts.activities.Get(key).Complete = true
+		if *t.Spec.Replicas == t.Status.AvailableReplicas {
+			opts.activities.Get(kn).Complete = true
 		}
 
 		// StatefulSet
