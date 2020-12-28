@@ -87,7 +87,7 @@ func Intercept(fn InterceptFunc, clientSet *kubernetes.Clientset) (out io.Writer
 	errorOut = opts.errorWriter
 
 	watchEvents()
-	time.AfterFunc(1*time.Second, showActivitesSched)
+	// time.AfterFunc(1*time.Second, showActivitesSched)
 
 	return
 }

@@ -11,14 +11,6 @@ import (
 	"fmt"
 	"strings"
 
-	appsv1beta1 "k8s.io/api/apps/v1beta1"
-	appsv1beta2 "k8s.io/api/apps/v1beta2"
-	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta1 "k8s.io/api/batch/v1beta1"
-	batchv2alpha1 "k8s.io/api/batch/v2alpha1"
-	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
-
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -69,7 +61,7 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 
 					a := opts.activities.GetOrNew(eventKindName, eventPod)
 					a.AddMessage(Message{Info: event.Reason, When: event.CreationTimestamp.Time})
-					// showActivites(opts)
+					showActivites()
 					return
 				}
 			} else if recodredKind == "Pod" {
@@ -85,13 +77,11 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 				}
 
 				if metav1.IsControlledBy(eventRs, recordedObj) {
-					// opts.involvedObjects[eventKindName] = eventRs
-
 					curr.recordedEvents.Add(event.Name)
 
 					a := opts.activities.GetOrNew(eventKindName, eventRs)
 					a.AddMessage(Message{Info: event.Reason, When: event.CreationTimestamp.Time})
-					// showActivites(opts)
+					showActivites()
 					return
 				}
 			}
@@ -99,8 +89,7 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 	}
 }
 
-// showActivitesSched
-func showActivitesSched() {
+func showActivites() {
 	opts.ActivityWindow.SetText([]string{""})
 
 	for _, activity := range opts.activities {
@@ -109,7 +98,7 @@ func showActivitesSched() {
 			s := fmt.Sprintf("  |- %v", msg.Info)
 			opts.writer.Write([]byte(s))
 		}
-		checkComplete(activity)
+		// checkComplete(activity)
 		// if not ready, add `...` at end, else add ✅ at end
 		if activity.Complete {
 			opts.writer.Write([]byte(fmt.Sprintf("  |- %v", "✅")))
@@ -117,111 +106,4 @@ func showActivitesSched() {
 			opts.writer.Write([]byte(fmt.Sprintf("  |- %v", "...")))
 		}
 	}
-}
-
-func checkComplete(act *Activity) {
-	kn, obj := act.KindName, act.Obj
-
-	switch t := obj.(type) {
-
-	// Pod
-	// when
-	// Status:         Running
-	case *corev1.Pod:
-		if t.Status.Phase == corev1.PodRunning {
-			opts.activities.Get(kn).Complete = true
-		}
-
-		// ReplicationController
-		// when
-		// Replicas:       1 current / 1 desired
-	case *corev1.ReplicationController:
-		if *t.Spec.Replicas == t.Status.AvailableReplicas {
-			opts.activities.Get(kn).Complete = true
-		}
-
-		// Deployment
-	case *extensionsv1beta1.Deployment:
-		if *t.Spec.Replicas == t.Status.AvailableReplicas {
-			opts.activities.Get(kn).Complete = true
-		}
-	case *appsv1beta1.Deployment:
-		if *t.Spec.Replicas == t.Status.AvailableReplicas {
-			opts.activities.Get(kn).Complete = true
-		}
-	case *appsv1beta2.Deployment:
-		if *t.Spec.Replicas == t.Status.AvailableReplicas {
-			opts.activities.Get(kn).Complete = true
-		}
-	case *appsv1.Deployment:
-		if *t.Spec.Replicas == t.Status.AvailableReplicas {
-			opts.activities.Get(kn).Complete = true
-		}
-
-		// DaemonSet
-	case *extensionsv1beta1.DaemonSet:
-		if len(t.Status.Conditions) > 0 && t.Status.Conditions[0].Status == corev1.ConditionTrue {
-			key := t.Kind + t.Name
-			opts.activities.Get(key).Complete = true
-		}
-	case *appsv1beta2.DaemonSet:
-		if len(t.Status.Conditions) > 0 && t.Status.Conditions[0].Status == corev1.ConditionTrue {
-			key := t.Kind + t.Name
-			opts.activities.Get(key).Complete = true
-		}
-	case *appsv1.DaemonSet:
-		if len(t.Status.Conditions) > 0 && t.Status.Conditions[0].Status == corev1.ConditionTrue {
-			key := t.Kind + t.Name
-			opts.activities.Get(key).Complete = true
-		}
-
-		// ReplicaSet
-		// when
-		// Replicas:       1 current / 1 desired
-	case *extensionsv1beta1.ReplicaSet:
-		if *t.Spec.Replicas == t.Status.AvailableReplicas {
-			opts.activities.Get(kn).Complete = true
-		}
-	case *appsv1beta2.ReplicaSet:
-		if *t.Spec.Replicas == t.Status.AvailableReplicas {
-			opts.activities.Get(kn).Complete = true
-		}
-	case *appsv1.ReplicaSet:
-		if *t.Spec.Replicas == t.Status.AvailableReplicas {
-			opts.activities.Get(kn).Complete = true
-		}
-
-		// StatefulSet
-	case *appsv1beta1.StatefulSet:
-		if len(t.Status.Conditions) > 0 && t.Status.Conditions[0].Status == corev1.ConditionTrue {
-			key := t.Kind + t.Name
-			opts.activities.Get(key).Complete = true
-		}
-	case *appsv1beta2.StatefulSet:
-		if len(t.Status.Conditions) > 0 && t.Status.Conditions[0].Status == corev1.ConditionTrue {
-			key := t.Kind + t.Name
-			opts.activities.Get(key).Complete = true
-		}
-	case *appsv1.StatefulSet:
-		if len(t.Status.Conditions) > 0 && t.Status.Conditions[0].Status == corev1.ConditionTrue {
-			key := t.Kind + t.Name
-			opts.activities.Get(key).Complete = true
-		}
-
-		// Job
-	case *batchv1.Job:
-		if len(t.Status.Conditions) > 0 && t.Status.Conditions[0].Status == corev1.ConditionTrue {
-			key := t.Kind + t.Name
-			opts.activities.Get(key).Complete = true
-		}
-
-		// CronJob complete=true by default
-	case *batchv1beta1.CronJob:
-		key := t.Kind + t.Name
-		opts.activities.Get(key).Complete = true
-	case *batchv2alpha1.CronJob:
-		key := t.Kind + t.Name
-		opts.activities.Get(key).Complete = true
-	}
-
 }
