@@ -2,6 +2,8 @@ package kit
 
 import (
 	"time"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Activities Activities
@@ -10,7 +12,9 @@ type Activities []*Activity
 // Activity Activity
 type Activity struct {
 	KindName string
+	Obj      metav1.Object
 	Msg      []Message
+	Complete bool
 }
 
 // Message Message
@@ -43,17 +47,17 @@ func (t *Activities) Exists(kindName string) bool {
 }
 
 // GetOrNew return a new one if not exists
-func (t *Activities) GetOrNew(kindName string) *Activity {
+func (t *Activities) GetOrNew(kindName string, obj metav1.Object) *Activity {
 	a := t.Get(kindName)
 	if a != nil {
 		return a
 	}
-	return t.New(kindName)
+	return t.New(kindName, obj)
 }
 
 // New New
-func (t *Activities) New(kindName string) *Activity {
-	n := &Activity{KindName: kindName, Msg: []Message{}}
+func (t *Activities) New(kindName string, obj metav1.Object) *Activity {
+	n := &Activity{KindName: kindName, Obj: obj, Msg: []Message{}, Complete: false}
 	*t = append(*t, n)
 
 	return n
