@@ -30,7 +30,6 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 	eventKindName := eventInvolvedKind + "/" + eventInvolvedName
 
 	// if the involved obj of event was containes in the map, show message in the Activity window.
-	// involvedObj := opts.involvedObjects[eventInvolvedName]
 	involvedObj := opts.activities.Get(eventInvolvedName)
 	if involvedObj != nil {
 		if event.Type != corev1.EventTypeNormal {
@@ -56,7 +55,6 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 
 			if recodredKind == "ReplicaSet" {
 				if metav1.IsControlledBy(eventPod, recordedObj) {
-					// opts.involvedObjects[eventKindName] = eventPod
 					curr.recordedEvents.Add(event.Name)
 
 					a := opts.activities.GetOrNew(eventKindName, eventPod)
@@ -101,7 +99,6 @@ func showActivites() {
 			s := fmt.Sprintf("  |- %v", msg.Info)
 			opts.writer.Write([]byte(s))
 		}
-		// checkComplete(activity)
 		// if not ready, add `...` at end, else add ✅ at end
 		if activity.Complete {
 			opts.writer.Write([]byte(fmt.Sprintf("  |- %v", "✅")))

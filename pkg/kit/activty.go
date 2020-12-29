@@ -1,7 +1,6 @@
 package kit
 
 import (
-	"fmt"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -156,7 +155,6 @@ func startWatch(act *Activity) {
 			AddFunc: func(obj interface{}) {},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				no := newObj.(*extensionsv1beta1.Deployment)
-				fmt.Printf("dep want: %v, act: %v\n", *no.Spec.Replicas, no.Status.AvailableReplicas)
 				if *no.Spec.Replicas == no.Status.ReadyReplicas {
 					act.Complete = true
 					showActivites()
