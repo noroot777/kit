@@ -90,6 +90,9 @@ func activities(event *corev1.Event, opts *Options, curr *Current) {
 }
 
 func showActivites() {
+	mtx.Lock()
+	defer mtx.Unlock()
+
 	opts.ActivityWindow.SetText([]string{""})
 
 	for _, activity := range opts.activities {

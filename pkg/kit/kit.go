@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	ui "github.com/noroot777/clui"
@@ -67,6 +69,9 @@ func HandleInfo(info *resource.Info) {
 
 // Intercept intercept the kubectl command
 func Intercept(fn InterceptFunc, clientSet *kubernetes.Clientset) (out io.Writer, errorOut io.Writer) {
+	panicFile, _ := os.OpenFile("/var/log/kitpanic.log", os.O_WRONLY|os.O_CREATE|os.O_SYNC, 0644)
+	syscall.Dup2(int(panicFile.Fd()), int(os.Stderr.Fd()))
+
 	opts = newOptions(clientSet)
 	curr = NewCurrent()
 	err := initResourceVersion()
@@ -87,7 +92,6 @@ func Intercept(fn InterceptFunc, clientSet *kubernetes.Clientset) (out io.Writer
 	errorOut = opts.errorWriter
 
 	watchEvents()
-	// time.AfterFunc(1*time.Second, showActivitesSched)
 
 	return
 }

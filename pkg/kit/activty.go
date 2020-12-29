@@ -1,6 +1,7 @@
 package kit
 
 import (
+	"fmt"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -12,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 )
@@ -97,14 +99,19 @@ func (t *Activities) New(kindName string, obj metav1.Object) *Activity {
 // }
 
 func startWatch(act *Activity) {
+	defer runtime.HandleCrash()
 	stopper := make(chan struct{})
 
-	var siOpts []informers.SharedInformerOption
-	siOpts = append(siOpts, informers.WithNamespace(act.Obj.GetNamespace()))
+	var siOpts = make([]informers.SharedInformerOption, 2)
+	op := func(o *metav1.ListOptions) {
+		o.FieldSelector = "metadata.name=" + act.Obj.GetName()
+	}
+	siOpts[0] = informers.WithTweakListOptions(op)
+	siOpts[1] = informers.WithNamespace(act.Obj.GetNamespace())
 	f := informers.NewSharedInformerFactoryWithOptions(opts.ClientSet, 0, siOpts...)
 	var informer cache.SharedIndexInformer
 
-	switch t := act.Obj.(type) {
+	switch act.Obj.(type) {
 	case *corev1.Pod:
 		informer = f.Core().V1().Pods().Informer()
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -114,7 +121,8 @@ func startWatch(act *Activity) {
 				// Pod
 				// when
 				// Status:         Running
-				if t.Status.Phase == corev1.PodRunning {
+				no := newObj.(*corev1.Pod)
+				if no.Status.Phase == corev1.PodRunning {
 					act.Complete = true
 					showActivites()
 				}
@@ -122,160 +130,155 @@ func startWatch(act *Activity) {
 			DeleteFunc: func(obj interface{}) {
 			},
 		})
-	case *corev1.ReplicationController:
-		informer = f.Core().V1().ReplicationControllers().Informer()
-		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-			},
-			UpdateFunc: func(oldObj, newObj interface{}) {
-				// ReplicationController
-				// when
-				// Replicas:       1 current / 1 desired
-				if *t.Spec.Replicas == t.Status.AvailableReplicas {
-					act.Complete = true
-					showActivites()
-				}
-			},
-			DeleteFunc: func(obj interface{}) {
-			},
-		})
+	// case *corev1.ReplicationController:
+	// 	informer = f.Core().V1().ReplicationControllers().Informer()
+	// 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	// 		AddFunc: func(obj interface{}) {
+	// 		},
+	// 		UpdateFunc: func(oldObj, newObj interface{}) {
+	// 			// ReplicationController
+	// 			// when
+	// 			// Replicas:       1 current / 1 desired
+	// 			no := newObj.(*corev1.ReplicationController)
+	// 			if *no.Spec.Replicas == no.Status.AvailableReplicas {
+	// 				act.Complete = true
+	// 				showActivites()
+	// 			}
+	// 		},
+	// 		DeleteFunc: func(obj interface{}) {
+	// 		},
+	// 	})
 
-		// Deployment
+	// Deployment
 	case *extensionsv1beta1.Deployment:
 		informer = f.Extensions().V1beta1().Deployments().Informer()
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-			},
+			AddFunc: func(obj interface{}) {},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				if *t.Spec.Replicas == t.Status.AvailableReplicas {
+				no := newObj.(*extensionsv1beta1.Deployment)
+				fmt.Printf("dep want: %v, act: %v\n", *no.Spec.Replicas, no.Status.AvailableReplicas)
+				if *no.Spec.Replicas == no.Status.ReadyReplicas {
 					act.Complete = true
 					showActivites()
 				}
 			},
-			DeleteFunc: func(obj interface{}) {
-			},
+			DeleteFunc: func(obj interface{}) {},
 		})
 	case *appsv1beta1.Deployment:
 		informer = f.Apps().V1beta1().Deployments().Informer()
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-			},
+			AddFunc: func(obj interface{}) {},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				if *t.Spec.Replicas == t.Status.AvailableReplicas {
+				no := newObj.(*appsv1beta1.Deployment)
+				if *no.Spec.Replicas == no.Status.ReadyReplicas {
 					act.Complete = true
 					showActivites()
 				}
 			},
-			DeleteFunc: func(obj interface{}) {
-			},
+			DeleteFunc: func(obj interface{}) {},
 		})
 	case *appsv1beta2.Deployment:
 		informer = f.Apps().V1beta2().Deployments().Informer()
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-			},
+			AddFunc: func(obj interface{}) {},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				if *t.Spec.Replicas == t.Status.AvailableReplicas {
+				no := newObj.(*appsv1beta2.Deployment)
+				if *no.Spec.Replicas == no.Status.ReadyReplicas {
 					act.Complete = true
 					showActivites()
 				}
 			},
-			DeleteFunc: func(obj interface{}) {
-			},
+			DeleteFunc: func(obj interface{}) {},
 		})
 	case *appsv1.Deployment:
 		informer = f.Apps().V1().Deployments().Informer()
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-			},
+			AddFunc: func(obj interface{}) {},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				if *t.Spec.Replicas == t.Status.AvailableReplicas {
+				no := newObj.(*appsv1.Deployment)
+				if *no.Spec.Replicas == no.Status.ReadyReplicas {
 					act.Complete = true
 					showActivites()
 				}
 			},
-			DeleteFunc: func(obj interface{}) {
-			},
+			DeleteFunc: func(obj interface{}) {},
 		})
 
 		// DaemonSet
-	case *extensionsv1beta1.DaemonSet:
-		informer = f.Extensions().V1beta1().DaemonSets().Informer()
-	case *appsv1beta2.DaemonSet:
-		informer = f.Apps().V1beta2().DaemonSets().Informer()
-	case *appsv1.DaemonSet:
-		informer = f.Apps().V1().DaemonSets().Informer()
+	// case *extensionsv1beta1.DaemonSet:
+	// 	informer = f.Extensions().V1beta1().DaemonSets().Informer()
+	// case *appsv1beta2.DaemonSet:
+	// 	informer = f.Apps().V1beta2().DaemonSets().Informer()
+	// case *appsv1.DaemonSet:
+	// 	informer = f.Apps().V1().DaemonSets().Informer()
 
-		// ReplicaSet
+	// ReplicaSet
 	case *extensionsv1beta1.ReplicaSet:
 		informer = f.Extensions().V1beta1().ReplicaSets().Informer()
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-			},
+			AddFunc: func(obj interface{}) {},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				// ReplicaSet
 				// when
 				// Replicas:       1 current / 1 desired
-				if *t.Spec.Replicas == t.Status.AvailableReplicas {
+				no := newObj.(*extensionsv1beta1.ReplicaSet)
+				if *no.Spec.Replicas == no.Status.ReadyReplicas {
 					act.Complete = true
 					showActivites()
 				}
 			},
-			DeleteFunc: func(obj interface{}) {
-			},
+			DeleteFunc: func(obj interface{}) {},
 		})
 	case *appsv1beta2.ReplicaSet:
 		informer = f.Apps().V1beta2().ReplicaSets().Informer()
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-			},
+			AddFunc: func(obj interface{}) {},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				// ReplicaSet
 				// when
 				// Replicas:       1 current / 1 desired
-				if *t.Spec.Replicas == t.Status.AvailableReplicas {
+				no := newObj.(*appsv1beta2.ReplicaSet)
+				if *no.Spec.Replicas == no.Status.ReadyReplicas {
 					act.Complete = true
 					showActivites()
 				}
 			},
-			DeleteFunc: func(obj interface{}) {
-			},
+			DeleteFunc: func(obj interface{}) {},
 		})
 	case *appsv1.ReplicaSet:
 		informer = f.Apps().V1().ReplicaSets().Informer()
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: func(obj interface{}) {
-			},
+			AddFunc: func(obj interface{}) {},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				// ReplicaSet
 				// when
 				// Replicas:       1 current / 1 desired
-				if *t.Spec.Replicas == t.Status.AvailableReplicas {
+				no := newObj.(*appsv1.ReplicaSet)
+				if *no.Spec.Replicas == no.Status.ReadyReplicas {
 					act.Complete = true
 					showActivites()
 				}
 			},
-			DeleteFunc: func(obj interface{}) {
-			},
+			DeleteFunc: func(obj interface{}) {},
 		})
 
 		// StatefulSet
-	case *appsv1beta1.StatefulSet:
-		informer = f.Apps().V1beta1().StatefulSets().Informer()
-	case *appsv1beta2.StatefulSet:
-		informer = f.Apps().V1beta2().StatefulSets().Informer()
-	case *appsv1.StatefulSet:
-		informer = f.Apps().V1().StatefulSets().Informer()
+		// case *appsv1beta1.StatefulSet:
+		// 	informer = f.Apps().V1beta1().StatefulSets().Informer()
+		// case *appsv1beta2.StatefulSet:
+		// 	informer = f.Apps().V1beta2().StatefulSets().Informer()
+		// case *appsv1.StatefulSet:
+		// 	informer = f.Apps().V1().StatefulSets().Informer()
 
 		// Job
-	case *batchv1.Job:
-		informer = f.Batch().V1().Jobs().Informer()
+		// case *batchv1.Job:
+		// 	informer = f.Batch().V1().Jobs().Informer()
 
 		// CronJob
-	case *batchv1beta1.CronJob:
-		informer = f.Batch().V1beta1().CronJobs().Informer()
-	case *batchv2alpha1.CronJob:
-		informer = f.Batch().V2alpha1().CronJobs().Informer()
+		// case *batchv1beta1.CronJob:
+		// 	informer = f.Batch().V1beta1().CronJobs().Informer()
+		// case *batchv2alpha1.CronJob:
+		// 	informer = f.Batch().V2alpha1().CronJobs().Informer()
 	}
 
 	go f.Start(stopper)
