@@ -124,9 +124,6 @@ type DeleteOptions struct {
 	Mapper        meta.RESTMapper
 	Result        *resource.Result
 
-	// add by kit
-	objects []*resource.Info
-
 	genericclioptions.IOStreams
 }
 
@@ -144,10 +141,9 @@ func NewCmdDelete(f cmdutil.Factory, streams genericclioptions.IOStreams) *cobra
 			cmdutil.CheckErr(err)
 
 			// add by kit
+			cmdutil.BehaviorOnFatal(kit.KitFatal)
 			clientSet, e := f.KubernetesClientSet()
 			cmdutil.CheckErr(e)
-			// cmdNamespace, _, e := f.ToRawKubeConfigLoader().Namespace()
-			// cmdutil.CheckErr(e)
 			o.Out, o.ErrOut = kit.Intercept(kit.InterceptDelete, clientSet)
 
 			cmdutil.CheckErr(o.Complete(f, args, cmd))
@@ -401,9 +397,6 @@ func (o *DeleteOptions) DeleteResult(r *resource.Result) error {
 		klog.V(1).Info(err)
 		return nil
 	}
-
-	// add by kit
-	o.objects = deletedInfos
 
 	return err
 }

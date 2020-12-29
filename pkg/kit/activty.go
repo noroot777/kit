@@ -129,24 +129,24 @@ func startWatch(act *Activity) {
 			DeleteFunc: func(obj interface{}) {
 			},
 		})
-	// case *corev1.ReplicationController:
-	// 	informer = f.Core().V1().ReplicationControllers().Informer()
-	// 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-	// 		AddFunc: func(obj interface{}) {
-	// 		},
-	// 		UpdateFunc: func(oldObj, newObj interface{}) {
-	// 			// ReplicationController
-	// 			// when
-	// 			// Replicas:       1 current / 1 desired
-	// 			no := newObj.(*corev1.ReplicationController)
-	// 			if *no.Spec.Replicas == no.Status.AvailableReplicas {
-	// 				act.Complete = true
-	// 				showActivites()
-	// 			}
-	// 		},
-	// 		DeleteFunc: func(obj interface{}) {
-	// 		},
-	// 	})
+	case *corev1.ReplicationController:
+		informer = f.Core().V1().ReplicationControllers().Informer()
+		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				// ReplicationController
+				// when
+				// Replicas:       1 current / 1 desired
+				no := newObj.(*corev1.ReplicationController)
+				if *no.Spec.Replicas == no.Status.AvailableReplicas {
+					act.Complete = true
+					showActivites()
+				}
+			},
+			DeleteFunc: func(obj interface{}) {
+			},
+		})
 
 	// Deployment
 	case *extensionsv1beta1.Deployment:
@@ -203,12 +203,12 @@ func startWatch(act *Activity) {
 		})
 
 		// DaemonSet
-	// case *extensionsv1beta1.DaemonSet:
-	// 	informer = f.Extensions().V1beta1().DaemonSets().Informer()
-	// case *appsv1beta2.DaemonSet:
-	// 	informer = f.Apps().V1beta2().DaemonSets().Informer()
-	// case *appsv1.DaemonSet:
-	// 	informer = f.Apps().V1().DaemonSets().Informer()
+	case *extensionsv1beta1.DaemonSet:
+		informer = f.Extensions().V1beta1().DaemonSets().Informer()
+	case *appsv1beta2.DaemonSet:
+		informer = f.Apps().V1beta2().DaemonSets().Informer()
+	case *appsv1.DaemonSet:
+		informer = f.Apps().V1().DaemonSets().Informer()
 
 	// ReplicaSet
 	case *extensionsv1beta1.ReplicaSet:
@@ -260,23 +260,23 @@ func startWatch(act *Activity) {
 			DeleteFunc: func(obj interface{}) {},
 		})
 
-		// StatefulSet
-		// case *appsv1beta1.StatefulSet:
-		// 	informer = f.Apps().V1beta1().StatefulSets().Informer()
-		// case *appsv1beta2.StatefulSet:
-		// 	informer = f.Apps().V1beta2().StatefulSets().Informer()
-		// case *appsv1.StatefulSet:
-		// 	informer = f.Apps().V1().StatefulSets().Informer()
+	// StatefulSet
+	case *appsv1beta1.StatefulSet:
+		informer = f.Apps().V1beta1().StatefulSets().Informer()
+	case *appsv1beta2.StatefulSet:
+		informer = f.Apps().V1beta2().StatefulSets().Informer()
+	case *appsv1.StatefulSet:
+		informer = f.Apps().V1().StatefulSets().Informer()
 
-		// Job
-		// case *batchv1.Job:
-		// 	informer = f.Batch().V1().Jobs().Informer()
+	// Job
+	case *batchv1.Job:
+		informer = f.Batch().V1().Jobs().Informer()
 
-		// CronJob
-		// case *batchv1beta1.CronJob:
-		// 	informer = f.Batch().V1beta1().CronJobs().Informer()
-		// case *batchv2alpha1.CronJob:
-		// 	informer = f.Batch().V2alpha1().CronJobs().Informer()
+	// CronJob
+	case *batchv1beta1.CronJob:
+		informer = f.Batch().V1beta1().CronJobs().Informer()
+	case *batchv2alpha1.CronJob:
+		informer = f.Batch().V2alpha1().CronJobs().Informer()
 	}
 
 	go f.Start(stopper)

@@ -10,6 +10,7 @@ import (
 	mapset "github.com/deckarep/golang-set"
 	ui "github.com/noroot777/clui"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/klog/v2"
 )
 
 // UIWriter write to UI
@@ -237,4 +238,20 @@ func GoID() int {
 		panic(fmt.Sprintf("cannot get goroutine id: %v", err))
 	}
 	return id
+}
+
+// KitFatal prints the message (if provided) and then exits. If V(6) or greater,
+// klog.Fatal is invoked for extended information.
+func KitFatal(msg string, code int) {
+	if klog.V(6).Enabled() {
+		klog.FatalDepth(2, msg)
+	}
+	if len(msg) > 0 {
+		// add newline if needed
+		if !strings.HasSuffix(msg, "\n") {
+			msg += "\n"
+		}
+		fmt.Fprint(opts.errorWriter, msg)
+	}
+	// os.Exit(code)
 }

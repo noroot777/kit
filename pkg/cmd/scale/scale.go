@@ -117,6 +117,7 @@ func NewCmdScale(f cmdutil.Factory, ioStreams genericclioptions.IOStreams) *cobr
 		Run: func(cmd *cobra.Command, args []string) {
 
 			// add by kit
+			cmdutil.BehaviorOnFatal(kit.KitFatal)
 			clientSet, e := f.KubernetesClientSet()
 			cmdutil.CheckErr(e)
 			o.Out, o.ErrOut = kit.Intercept(nil, clientSet)
