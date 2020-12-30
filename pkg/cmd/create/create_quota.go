@@ -31,6 +31,7 @@ import (
 	resourcecli "k8s.io/cli-runtime/pkg/resource"
 	coreclient "k8s.io/client-go/kubernetes/typed/core/v1"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"k8s.io/kubectl/pkg/kit"
 	"k8s.io/kubectl/pkg/scheme"
 	"k8s.io/kubectl/pkg/util"
 	"k8s.io/kubectl/pkg/util/i18n"
@@ -95,6 +96,9 @@ func NewCmdCreateQuota(f cmdutil.Factory, ioStreams genericclioptions.IOStreams)
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Validate())
 			cmdutil.CheckErr(o.Run())
+
+			// add by kit
+			kit.Hold()
 		},
 	}
 

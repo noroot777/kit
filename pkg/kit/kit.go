@@ -56,15 +56,17 @@ func newOptions(clientSet *kubernetes.Clientset) *Options {
 	return o
 }
 
-// HandleInfo handle with the execed info
-func HandleInfo(info *resource.Info) {
-	curr.AddNamespace(info.Namespace)
-	metaObj := info.Object.(*unstructured.Unstructured)
-	kn := info.Object.GetObjectKind().GroupVersionKind().Kind + "/" + metaObj.GetName()
+// newOptionsForUI create new Options without Clientset
+func newOptionsForUI() *Options {
+	o := &Options{
+		activities: []*Activity{},
+	}
+	return o
+}
 
-	opts.activities.New(kn, metaObj)
-	// TODO print a message to activity view. 根据不同的命令打印不同内容，eg: apply(delete/create) imds/Deployment/imds-web
-	// opts.writer.Write([]byte(fmt.Sprintf("apply %v/%v/%v", metaObj.GetNamespace(), info.Mapping.GroupVersionKind.Kind, metaObj.GetName())))
+// Writer returns writer
+func Writer() (out io.Writer, errorOut io.Writer) {
+	return opts.writer, opts.errorWriter
 }
 
 // Intercept intercept the kubectl command
@@ -94,6 +96,19 @@ func Intercept(fn InterceptFunc, clientSet *kubernetes.Clientset) (out io.Writer
 	watchEvents()
 
 	return
+}
+
+// HandleInfo handle with the execed info
+func HandleInfo(info *resource.Info) {
+	curr.AddNamespace(info.Namespace)
+	if !isNil(info) && !isNil(info.Object) {
+		metaObj := info.Object.(*unstructured.Unstructured)
+		kn := info.Object.GetObjectKind().GroupVersionKind().Kind + "/" + metaObj.GetName()
+
+		opts.activities.New(kn, metaObj)
+		// TODO print a message to activity view. 根据不同的命令打印不同内容，eg: apply(delete/create) imds/Deployment/imds-web
+		// opts.writer.Write([]byte(fmt.Sprintf("apply %v/%v/%v", metaObj.GetNamespace(), info.Mapping.GroupVersionKind.Kind, metaObj.GetName())))
+	}
 }
 
 // drawUI draw a interactive term ui

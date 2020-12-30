@@ -23,6 +23,7 @@ import (
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/generate"
 	generateversioned "k8s.io/kubectl/pkg/generate/versioned"
+	"k8s.io/kubectl/pkg/kit"
 	"k8s.io/kubectl/pkg/util/i18n"
 	"k8s.io/kubectl/pkg/util/templates"
 )
@@ -57,6 +58,9 @@ func NewCmdCreateNamespace(f cmdutil.Factory, ioStreams genericclioptions.IOStre
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(options.Complete(f, cmd, args))
 			cmdutil.CheckErr(options.Run())
+
+			// add by kit
+			kit.Hold()
 		},
 	}
 

@@ -223,6 +223,9 @@ func (o *ScaleOptions) RunScale() error {
 	err = r.Visit(func(info *resource.Info, err error) error {
 		if err == nil {
 			infos = append(infos, info)
+
+			// add by kit
+			kit.HandleInfo(info)
 		}
 		return nil
 	})

@@ -32,6 +32,7 @@ import (
 	autoscalingv1client "k8s.io/client-go/kubernetes/typed/autoscaling/v1"
 	"k8s.io/client-go/scale"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"k8s.io/kubectl/pkg/kit"
 	"k8s.io/kubectl/pkg/scheme"
 	"k8s.io/kubectl/pkg/util"
 	"k8s.io/kubectl/pkg/util/i18n"
@@ -108,9 +109,18 @@ func NewCmdAutoscale(f cmdutil.Factory, ioStreams genericclioptions.IOStreams) *
 		Long:                  autoscaleLong,
 		Example:               autoscaleExample,
 		Run: func(cmd *cobra.Command, args []string) {
+			// add by kit
+			cmdutil.BehaviorOnFatal(kit.KitFatal)
+			clientSet, e := f.KubernetesClientSet()
+			cmdutil.CheckErr(e)
+			o.Out, o.ErrOut = kit.Intercept(kit.InterceptApply, clientSet)
+
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Validate())
 			cmdutil.CheckErr(o.Run())
+
+			// add by kit
+			kit.Hold()
 		},
 		ValidArgs: validArgs,
 	}
@@ -208,6 +218,9 @@ func (o *AutoscaleOptions) Run() error {
 
 	count := 0
 	err := r.Visit(func(info *resource.Info, err error) error {
+		// add by kit
+		kit.HandleInfo(info)
+
 		if err != nil {
 			return err
 		}

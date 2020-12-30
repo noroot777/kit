@@ -64,6 +64,10 @@ func isNilPtr(x interface{}) bool {
 	return v.Kind() == reflect.Ptr && v.IsNil()
 }
 
+func isNil(x interface{}) bool {
+	return x == nil || isNilPtr(x)
+}
+
 // FocusOn event scope. Use to filter events
 type FocusOn int
 

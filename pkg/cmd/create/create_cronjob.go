@@ -31,6 +31,7 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 	batchv1beta1client "k8s.io/client-go/kubernetes/typed/batch/v1beta1"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"k8s.io/kubectl/pkg/kit"
 	"k8s.io/kubectl/pkg/scheme"
 	"k8s.io/kubectl/pkg/util"
 	"k8s.io/kubectl/pkg/util/i18n"
@@ -92,6 +93,9 @@ func NewCmdCreateCronJob(f cmdutil.Factory, ioStreams genericclioptions.IOStream
 		Run: func(cmd *cobra.Command, args []string) {
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Run())
+
+			// add by kit
+			kit.Hold()
 		},
 	}
 

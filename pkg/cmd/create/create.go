@@ -39,6 +39,7 @@ import (
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 	"k8s.io/kubectl/pkg/cmd/util/editor"
 	"k8s.io/kubectl/pkg/generate"
+	"k8s.io/kubectl/pkg/kit"
 	"k8s.io/kubectl/pkg/rawhttp"
 	"k8s.io/kubectl/pkg/scheme"
 	"k8s.io/kubectl/pkg/util"
@@ -100,6 +101,13 @@ func NewCreateOptions(ioStreams genericclioptions.IOStreams) *CreateOptions {
 func NewCmdCreate(f cmdutil.Factory, ioStreams genericclioptions.IOStreams) *cobra.Command {
 	o := NewCreateOptions(ioStreams)
 
+	// add by kit
+	cmdutil.BehaviorOnFatal(kit.KitFatal)
+	clientSet, e := f.KubernetesClientSet()
+	cmdutil.CheckErr(e)
+	o.Out, o.ErrOut = kit.Intercept(kit.InterceptApply, clientSet)
+	ioStreams.Out, ioStreams.ErrOut = o.Out, o.ErrOut
+
 	cmd := &cobra.Command{
 		Use:                   "create -f FILENAME",
 		DisableFlagsInUseLine: true,
@@ -113,9 +121,13 @@ func NewCmdCreate(f cmdutil.Factory, ioStreams genericclioptions.IOStreams) *cob
 				defaultRunFunc(cmd, args)
 				return
 			}
+
 			cmdutil.CheckErr(o.Complete(f, cmd))
 			cmdutil.CheckErr(o.ValidateArgs(cmd, args))
 			cmdutil.CheckErr(o.RunCreate(f, cmd))
+
+			// add by kit
+			kit.Hold()
 		},
 	}
 
@@ -153,6 +165,7 @@ func NewCmdCreate(f cmdutil.Factory, ioStreams genericclioptions.IOStreams) *cob
 	cmd.AddCommand(NewCmdCreateJob(f, ioStreams))
 	cmd.AddCommand(NewCmdCreateCronJob(f, ioStreams))
 	cmd.AddCommand(NewCmdCreateIngress(f, ioStreams))
+
 	return cmd
 }
 
@@ -265,6 +278,9 @@ func (o *CreateOptions) RunCreate(f cmdutil.Factory, cmd *cobra.Command) error {
 
 	count := 0
 	err = r.Visit(func(info *resource.Info, err error) error {
+		// add by kit
+		kit.HandleInfo(info)
+
 		if err != nil {
 			return err
 		}
