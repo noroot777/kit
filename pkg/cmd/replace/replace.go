@@ -36,6 +36,7 @@ import (
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/kubectl/pkg/cmd/delete"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
+	"k8s.io/kubectl/pkg/kit"
 	"k8s.io/kubectl/pkg/rawhttp"
 	"k8s.io/kubectl/pkg/scheme"
 	"k8s.io/kubectl/pkg/util"
@@ -116,9 +117,18 @@ func NewCmdReplace(f cmdutil.Factory, streams genericclioptions.IOStreams) *cobr
 		Long:                  replaceLong,
 		Example:               replaceExample,
 		Run: func(cmd *cobra.Command, args []string) {
+			// add by kit
+			cmdutil.BehaviorOnFatal(kit.KitFatal)
+			clientSet, e := f.KubernetesClientSet()
+			cmdutil.CheckErr(e)
+			o.Out, o.ErrOut = kit.Intercept(kit.InterceptDelete, clientSet)
+
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Validate(cmd))
 			cmdutil.CheckErr(o.Run(f))
+
+			// add by kit
+			kit.Hold()
 		},
 	}
 
@@ -273,6 +283,9 @@ func (o *ReplaceOptions) Run(f cmdutil.Factory) error {
 	}
 
 	return r.Visit(func(info *resource.Info, err error) error {
+		// add by kit
+		kit.HandleInfo(info)
+
 		if err != nil {
 			return err
 		}
@@ -347,6 +360,9 @@ func (o *ReplaceOptions) forceReplace() error {
 		timeout = 5 * time.Minute
 	}
 	err := r.Visit(func(info *resource.Info, err error) error {
+		// add by kit
+		kit.HandleInfo(info)
+
 		if err != nil {
 			return err
 		}
@@ -377,6 +393,9 @@ func (o *ReplaceOptions) forceReplace() error {
 
 	count := 0
 	err = r.Visit(func(info *resource.Info, err error) error {
+		// add by kit
+		kit.HandleInfo(info)
+
 		if err != nil {
 			return err
 		}
