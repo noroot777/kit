@@ -94,6 +94,13 @@ func NewCmdCreateJob(f cmdutil.Factory, ioStreams genericclioptions.IOStreams) *
 		Long:                  jobLong,
 		Example:               jobExample,
 		Run: func(cmd *cobra.Command, args []string) {
+			// add by kit
+			cmdutil.BehaviorOnFatal(kit.KitFatal)
+			clientSet, e := f.KubernetesClientSet()
+			cmdutil.CheckErr(e)
+			o.Out, o.ErrOut = kit.Intercept(kit.InterceptApply, clientSet)
+			ioStreams.Out, ioStreams.ErrOut = o.Out, o.ErrOut
+
 			cmdutil.CheckErr(o.Complete(f, cmd, args))
 			cmdutil.CheckErr(o.Validate())
 			cmdutil.CheckErr(o.Run())

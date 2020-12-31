@@ -101,13 +101,6 @@ func NewCreateOptions(ioStreams genericclioptions.IOStreams) *CreateOptions {
 func NewCmdCreate(f cmdutil.Factory, ioStreams genericclioptions.IOStreams) *cobra.Command {
 	o := NewCreateOptions(ioStreams)
 
-	// add by kit
-	cmdutil.BehaviorOnFatal(kit.KitFatal)
-	clientSet, e := f.KubernetesClientSet()
-	cmdutil.CheckErr(e)
-	o.Out, o.ErrOut = kit.Intercept(kit.InterceptApply, clientSet)
-	ioStreams.Out, ioStreams.ErrOut = o.Out, o.ErrOut
-
 	cmd := &cobra.Command{
 		Use:                   "create -f FILENAME",
 		DisableFlagsInUseLine: true,
@@ -121,6 +114,13 @@ func NewCmdCreate(f cmdutil.Factory, ioStreams genericclioptions.IOStreams) *cob
 				defaultRunFunc(cmd, args)
 				return
 			}
+
+			// add by kit
+			cmdutil.BehaviorOnFatal(kit.KitFatal)
+			clientSet, e := f.KubernetesClientSet()
+			cmdutil.CheckErr(e)
+			o.Out, o.ErrOut = kit.Intercept(kit.InterceptApply, clientSet)
+			ioStreams.Out, ioStreams.ErrOut = o.Out, o.ErrOut
 
 			cmdutil.CheckErr(o.Complete(f, cmd))
 			cmdutil.CheckErr(o.ValidateArgs(cmd, args))
