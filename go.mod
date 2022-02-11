@@ -6,12 +6,11 @@ go 1.15
 
 require (
 	github.com/MakeNowJust/heredoc v0.0.0-20170808103936-bb23615498cd
-	github.com/atotto/clipboard v0.1.2 // indirect
 	github.com/chai2010/gettext-go v0.0.0-20160711120539-c6fed771bfd5
 	github.com/davecgh/go-spew v1.1.1
 	github.com/daviddengcn/go-colortext v0.0.0-20160507010035-511bcaf42ccd
 	github.com/deckarep/golang-set v1.7.1
-	github.com/docker/distribution v2.7.1+incompatible
+	github.com/docker/distribution v2.8.0+incompatible
 	github.com/evanphx/json-patch v4.9.0+incompatible
 	github.com/exponent-io/jsonpath v0.0.0-20151013193312-d6023ce2651d
 	github.com/fatih/camelcase v1.0.0
@@ -22,7 +21,6 @@ require (
 	github.com/golangplus/testing v0.0.0-20180327235837-af21d9c3145e // indirect
 	github.com/google/go-cmp v0.5.2
 	github.com/googleapis/gnostic v0.4.1
-	github.com/huandu/xstrings v1.3.2 // indirect
 	github.com/jonboulle/clockwork v0.1.0
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de
 	github.com/lithammer/dedent v1.1.0
